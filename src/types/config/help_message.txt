@@ -1,0 +1,51 @@
+accelerate - static site generator
+
+Accelerate is a static site generator built on the GNU principle of small,
+single purpouse tools working together.
+
+Accelerate doesn't come with a lot built in, not even a templating engine. All
+it does is to index all the resources in the provided paths, maintain a shared
+context and call the plugins configured in the build config.
+
+In order to do actual work you integrate with external tools. To facilitate this
+Accelerate uses nimscript as the layer between the internal state and whatever
+tool you want to use.
+
+So to process all your HTML files through Nunjucks you would first have a plugin
+that loads all the content into the shared context, then another that would
+process each HTML file through Nunjucks and generate HTML with content.
+
+There are several plugins already available for use, and it is easy to write
+your own using Accelerates DSL and Nimscript. For more information read the
+Github readme: https://github.com/xxxxxx/xxxxxx#readme
+
+Usage:
+  acc build|test [options] [--exclude FILE] [--include FILE] [--config FILE] [--] SOURCE_DIR...
+  acc clean [options]
+  acc run [options] SCRIPT...
+  acc -h | --help
+  acc -v | --version
+
+Arguments:
+  SOURCE_DIR           A path to a directory, fully qualified or relative.
+  FILE                 A path to a file, fully qualified or relative.
+  SCRIPT               A path to a .nims file, fully qualified or relative.
+
+Build/Test specific options:
+  -e, --exclude FILE   Path to gitignore style blacklist
+  -i, --include FILE   Path to gitignore style whitelist
+  -c, --config FILE    Specify configuration path [default: ./config.yaml]
+  -o. --output DIR     Output directory [default: SOURCE_DIR/build]
+
+Clean specific options:
+  -k, --keep           Only remove cache and temporary files, leaving final
+                       artefacts alone.
+
+Run specific options:
+  -d, --directory DIR  The root directory to run the script in.
+
+Options:
+  -l, --log LEVEL      Set log level. Available levels are: all, debug, info,
+                       warning, fatal and silent. [default: info]
+  -h, --help           Print this help message.
+  -v, --version        Print version information.

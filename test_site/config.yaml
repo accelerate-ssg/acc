@@ -1,0 +1,42 @@
+%YAML 1.2
+---
+site:
+  name: "Accodeing"
+  domains:
+  - "accodeing.com"
+  - "accodeing.dev"
+
+build:
+- name: "Local sources"
+  script: "plugins/local_sources.nims"
+  config:
+    include: "*.md"
+- name: "Nunjucks"
+  script: "plugins/nunjucks_deno.nims"
+  after:
+  - "Markdown"
+  config:
+    pattern: "*.html"
+    ignore: "*.shtml"
+- name: "Transfigure"
+  script: "plugins/img_resize.nims"
+  after:
+  - "Picturesque"
+  before:
+  - "Parcel"
+  config:
+    svg-fallback: true
+- name: "Picturesque"
+  script: "plugins/picturesque.nims"
+  after:
+  - "Nunjucks"
+  config:
+    include: "*.gif, *.jpg, *.jpeg, *.png, *.webp, *.svg"
+- name: "Markdown"
+  script: "plugins/markdown.nims"
+  after:
+  - "Local sources"
+- name: "Parcel"
+  script: "plugins/parcel.nims"
+  config:
+    svg-fallback: true

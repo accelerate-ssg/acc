@@ -1,0 +1,5 @@
+name: "Transfigure"
+version: "0.1.0"
+author: "Jonas Schubert Erlandsson"
+description: "Uses the data from, for example, picturesque to resize"
+license: "MIT"
