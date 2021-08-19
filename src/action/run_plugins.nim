@@ -1,21 +1,22 @@
 import os
 import strutils
 import times
+import tables
 
 import logger
 import global_state
 import script/run
 
-proc run_plugins*( global_state: State ) =
+proc run_plugins*( state: State ) =
   var missing_scripts: seq[ string ] = @[]
 
   # Loop through all the configured plugins and make sure we can actually find
   # the script file tkey use as their entrypoint
   echo ""
-  for index, plugin in global_state.config.plugins:
-    if file_exists( global_state.config.source_directory / plugin.script ):
-      debug "Found ", global_state.config.source_directory / plugin.script
-      global_state.config.plugins[ index ].script = global_state.config.source_directory / plugin.script
+  for index, plugin in state.config.plugins:
+    if file_exists( state.config.map["source_directory"] / plugin.script ):
+      debug "Found ", state.config.map["source_directory"] / plugin.script
+      state.config.plugins[ index ].script = state.config.map["source_directory"] / plugin.script
     elif file_exists( plugin.script ):
       debug "Found ", plugin.script
     else:
@@ -30,7 +31,8 @@ proc run_plugins*( global_state: State ) =
   # All scripts available, loop through the plugins and run them
   echo ""
   let start_time = epoch_time()
-  for plugin in global_state.config.plugins:
+  for plugin in state.config.plugins:
+    state.current_plugin = plugin
     info "Running ", plugin.name
     let plugin_start_time = epoch_time()
     plugin.run()

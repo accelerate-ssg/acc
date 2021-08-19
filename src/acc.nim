@@ -7,7 +7,7 @@ import action/[build,test,clean,run]
 
 proc ctrl_c_handler() {.noconv.} =
   notice "Force quit."
-  warn "Incomplete artifacts might be left in the build directory ", state.config.destination_directory, "."
+  warn "Incomplete artifacts might be left in the build directory ", state.config.map["destination_directory"], "."
   quit 0
 
 proc main() =

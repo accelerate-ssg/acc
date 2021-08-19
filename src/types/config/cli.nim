@@ -10,11 +10,11 @@ import types/config
 const
   help* = staticRead "help_message.txt"
 
-proc set_path_if_exists( property: var string, value: Value ) =
+proc set_key_if_exists( config: var Config, key: string, value: Value ) =
   let path = $value
   try:
     if path != "" and (fileExists( path ) or dirExists( path )):
-      property = absolutePath( normalizedPath( path ))
+      config.map[ key ] = absolutePath( normalizedPath( path ))
   except:
     let
       e = getCurrentException()
@@ -23,26 +23,31 @@ proc set_path_if_exists( property: var string, value: Value ) =
 
 proc add_cli_options_to_config*( config: var Config ) =
   let version = "Accelerate 0.1.0, built at " & CompileDate & " " & CompileTime & " using Nim " & NimVersion
-  let args = docopt(help, version = version)
+  var args: Table[string, Value]
+  args = docopt(help, version = version )
 
-  if args["build"] or args["test"]:
-    config.action = ActionBuild
+  debug $args, "cli_options"
 
-    set_path_if_exists( config.blacklist, args["--exclude"] )
-    set_path_if_exists( config.whitelist, args["--include"] )
-    set_path_if_exists( config.local_config_path, args["--config"] )
-    set_path_if_exists( config.source_directory, args["SOURCE_DIR"] )
-    if $args["--output"] == "SOURCE_DIR/build":
-      config.destination_directory = config.source_directory / "build"
+  if args["build"]:
+    if args["--test"]:
+      config.action = ActionTest
     else:
-      config.destination_directory = $args["--output"]
+      config.action = ActionBuild
 
-  if args["test"]:
-    config.action = ActionTest
+    config.set_key_if_exists( "blacklist", args["--exclude"] )
+    config.set_key_if_exists( "local_config_path", args["--config"] )
+    config.set_key_if_exists( "source_directory", args["SOURCE_DIR"] )
+
+    if $args["--output"] == "SOURCE_DIR/build":
+      config.map["destination_directory"] = config.map["source_directory"] / "build"
+    else:
+      config.map["destination_directory"] = $args["--output"]
+
+    config.map["workspace_directory"] = config.map["destination_directory"] / ".acc"
 
   if args["clean"]:
     config.action = ActionClean
-    if args["keep"]: config.keep = true
+    if args["keep"]: config.map["keep_artifacts"] = "true"
 
   if args["run"]:
     config.action = ActionRun
@@ -51,7 +56,7 @@ proc add_cli_options_to_config*( config: var Config ) =
       plugin.name = get_plugin_name( path, "Plugin" & $(index+1) )
       plugin.script = path
       config.plugins.add( plugin )
-    set_path_if_exists( config.source_directory, args["--directory"] )
+    config.set_key_if_exists( "source_directory", args["--directory"] )
 
   case toLowerAscii( $args["--log"] ):
     of "all":
@@ -71,5 +76,3 @@ proc add_cli_options_to_config*( config: var Config ) =
 
   when defined(release):
     set_log_level( config.log_level )
-
-  debug $args, "cli_options"

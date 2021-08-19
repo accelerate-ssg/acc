@@ -29,20 +29,20 @@ proc set_parsing_context*( context: string )
 proc get_parsing_context*(): string
 
 const
-  DARK_RED = Color( 0xff2222 )
-  RED =      Color( 0xff5555 )
-  ORANGE =   Color( 0xeb9b34 )
-  YELLOW =   Color( 0xf5e02a )
-  GREEN =    Color( 0x55aa33 )
-  BLUE =     Color( 0x3dbef5 )
-  TEXT =     Color( 0xdddddd )
-  GREY =     Color( 0xaaaaaa )
+  DARK_RED = Color( 0xff0000 )
+  RED =      Color( 0xff5f5f )
+  ORANGE =   Color( 0xffaf00 )
+  YELLOW =   Color( 0xffd700 )
+  GREEN =    Color( 0x5faf5f )
+  BLUE =     Color( 0x5fafff )
+  TEXT =     Color( 0xdadada )
+  GREY =     Color( 0xa8a8a8 )
   BLACK =    Color( 0x000000 )
 
 template s( bg: Option[ Color ], fg: Option[ Color ], txt: string ): Segment =
   Segment( background_color: bg, foreground_color: fg, text: txt )
 
-template colored_printline( color: Color, header: string, message: string, context: string = " (" & get_parsing_context() & ")\n" ) =
+template colored_printline( color: Color, header: string, message: string, context: string = " \"" & get_parsing_context() & "\"\n" ) =
   stdout.set_background_color( BLACK )
   stdout.set_foreground_color( color )
   stdout.write header

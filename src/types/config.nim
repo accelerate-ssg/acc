@@ -1,3 +1,5 @@
+import tables
+
 from ../logger import LogLevel
 import plugin
 
@@ -6,18 +8,11 @@ type
     ActionNone, ActionBuild, ActionTest, ActionClean, ActionRun
 
   Config* = object
-    global_config_path*: string
-    local_config_path*: string
-    current_directory_path*: string
-    source_directory*: string
-    destination_directory*: string
+    name*: string
+    dns_name*: string
+    domains*: seq[ string ]
     action*: Action
     log_level*: LogLevel
-    blacklist*: string
-    whitelist*: string
-    keep*: bool
-
-    name*: string
-    domains*: seq[ string ]
-
+    map*: Table[ string, string ]
     plugins*: seq[ Plugin ]
+    files*: seq[ string ]

@@ -7,6 +7,7 @@ import logger
 import types/config
 import types/plugin
 import types/config/DAG
+import types/config/paths
 
 type
   Section = enum
@@ -29,6 +30,10 @@ proc parse_site_domains(): seq[ string ] =
     if event.kind == yamlEndSeq: break
   return domains
 
+proc parse_content_root(): string =
+  let event = events.next
+  return event.scalarContent
+
 proc parse_site_section( config: var Config ) =
   var
     event = events.next
@@ -40,6 +45,8 @@ proc parse_site_section( config: var Config ) =
         config.name = parse_site_name()
       of "domains":
         config.domains = parse_site_domains()
+      of "content_root":
+        config.map["content_root"] = parse_content_root()
     event = events.next
 
 proc parse_string_value( msg: string = "" ): string =
@@ -142,23 +149,19 @@ proc add_yaml_config( config: var Config, file_name: string ) =
     event = events.next
 
 proc add_global_yaml_to_config( config: var Config ):bool =
-  if fileExists( config.global_config_path ):
-    config.add_yaml_config( config.global_config_path )
+  if fileExists( config.global_config_path() ):
+    config.add_yaml_config( config.global_config_path() )
     return true
   else:
-    notice "Global config file \"", config.global_config_path ,"\" not found."
+    notice "Global config file \"", config.global_config_path() ,"\" not found."
     return false
 
 proc add_local_yaml_to_config( config: var Config ):bool =
-  if fileExists( config.local_config_path ):
-    config.add_yaml_config( config.source_directory / config.local_config_path )
-    return true
-  elif fileExists( config.source_directory / "config.yaml" ):
-    config.add_yaml_config( config.source_directory / "config.yaml" )
+  if fileExists( config.local_config_path() ):
+    config.add_yaml_config( config.local_config_path() )
     return true
   else:
-    let paths = config.source_directory / "config.yaml" & "\n" & config.local_config_path
-    warn "Local config file not found. Checked:\n", paths.indent(2)
+    warn "Global config file \"", config.local_config_path() ,"\" not found."
     return false
 
 proc add_yaml_to_config*( config: var Config ) =

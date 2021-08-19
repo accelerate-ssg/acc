@@ -4,6 +4,9 @@ import options
 import logger
 import types/plugin
 
+# TODO: https://nim-lang.org/blog/2020/04/03/version-120-released.html#capture
+# to get rid of the workaround compiler flag
+
 when isMainModule:
   log_level = lvlDebug
   parsing_context = "dag.nim"
