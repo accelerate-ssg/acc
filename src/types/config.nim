@@ -4,6 +4,7 @@ from ../logger import LogLevel
 import plugin
 
 type
+  Path* = string
   Action* = enum
     ActionNone, ActionBuild, ActionTest, ActionClean, ActionRun
 
@@ -15,4 +16,4 @@ type
     log_level*: LogLevel
     map*: Table[ string, string ]
     plugins*: seq[ Plugin ]
-    files*: seq[ string ]
+    files*: seq[ Path ]

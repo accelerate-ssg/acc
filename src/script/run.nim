@@ -1,4 +1,4 @@
-import compiler/[nimeval, llstream, lineinfos, options, renderer]
+import compiler/[nimeval, llstream, lineinfos, options, renderer, msgs]
 import os
 import strutils
 import macros
@@ -8,23 +8,18 @@ import tables
 import logger
 import types/plugin
 import script/routines
+import action/internal_functions/mustache_renderer
 import global_state
 
 # Read the filenames in ./callbacks at compile time
 const CT_callbacks_string = staticExec("ls -1 callbacks")
 
-# Macro for splitting the string by \n and importing the separated files
-macro import_callbacks(): untyped =
-  let files = CT_callbacks_string.splitLines
+macro importFolder() =
   result = newStmtList()
-  for file in files:
+  for file in CT_callbacks_string.splitLines:
     result.add(parseStmt("import script/callbacks/" & file[0..^5]))
 
-# Ignore warnings about this not being used, it is technically correct, but
-# there is initialisation code that needs to run before we can call it
-# dynamically further down. And I didn't want to turn off the warning for the
-# entire module, since you can't turn it off locally.
-import_callbacks()
+importFolder
 
 const
   api_implementation = staticRead "script/api_impl.nim"
@@ -44,12 +39,15 @@ proc initInterpreter(script_name: string): Interpreter =
       nim_lib_root_path / "strutils",
       nim_lib_root_path / "system",
       "core / api"
-    ]
+    ],
+    {}, # TSandboxFlags
+    @[("nimscript", "true"),("debug", "true")],
   )
 
 proc set_error_handler( interpreter: Interpreter, script_path: string ) =
   interpreter.registerErrorHook( proc (config: ConfigRef; info: TLineInfo;
                          msg: string; severity: Severity) {.gcsafe.} =
+
     if severity == Error and config.errorCounter >= config.errorMax:
       let
         line_number = int( info.line )
@@ -62,6 +60,12 @@ proc set_error_handler( interpreter: Interpreter, script_path: string ) =
         debug "Script error in API implementation (", line_number, ", ", info.col, ") while running", script_path, "\n", indent( msg, 2 )
     elif severity == Warning:
       warn msg
+    else:
+      let
+        line_number = int( info.line )
+        relativ_line_number = line_number - api_implementation_lines
+
+      notice "!!! ", msg, " @ ", toMsgFilename( config, info.fileIndex ), ":", relativ_line_number
   )
 
 proc inject_api_implementation_lines( stream: PLLStream ) =
@@ -71,7 +75,21 @@ proc inject_api_implementation_lines( stream: PLLStream ) =
 
   stream.s[ index .. index + comment.len - 1 ] = $api_implementation_lines
 
-proc run*( plugin: Plugin ) =
+
+
+proc run_function*( plugin: Plugin ) =
+
+  debug "Running internal function"
+
+  case plugin.function:
+    of "mustache":
+      mustache_renderer.run( plugin )
+    else:
+      error "Unknown internal function \"", plugin.function, "\""
+
+
+
+proc run_script*( plugin: Plugin ) =
 
   debug "Running ", plugin.name, " from ", plugin.script
 
@@ -90,8 +108,11 @@ proc run*( plugin: Plugin ) =
   # Register script -> runtime functions to interact with the state. These are
   # wrapped by templates in the API implementation that is appended to the
   # scripts
-  interpreter.implementRoutine( "*", script_name, "getFromContext", getFromContext )
-  interpreter.implementRoutine( "*", script_name, "setInContext", setInContext )
+  interpreter.implementRoutine( "*", script_name, "getFromContext", context_get )
+  interpreter.implementRoutine( "*", script_name, "context_set_bool", context_set_bool )
+  interpreter.implementRoutine( "*", script_name, "context_set_int", context_set_int )
+  interpreter.implementRoutine( "*", script_name, "context_set_float", context_set_float )
+  interpreter.implementRoutine( "*", script_name, "context_set_string", context_set_string )
   interpreter.implementRoutine( "*", script_name, "readFile", simpleReadFile )
   interpreter.implementRoutine( "*", script_name, "exec", execWithExitCode )
   interpreter.implementRoutine( "*", script_name, "exe", execWithResults )
@@ -108,19 +129,20 @@ proc run*( plugin: Plugin ) =
   let callbacks = file_names.mapIt( it.splitFile.name )
 
   # Using that list of available callbacks, check for them in the script context
-  echo ""
-  debug "Checking for callbacks:"
   for callback in callbacks:
-    let callback_proc = interpreter.selectRoutine( callback )
-    if callback_proc == nil:
-      debug "Did not find ", callback
-    else:
+    let
+      callback_proc = interpreter.selectRoutine( callback )
+
+    if callback_proc != nil:
       let fun = state.registry[ callback ]
       fun( interpreter, callback_proc )
 
-  # for sym in i.exportedSymbols:
-  #   let val = i.getGlobalValue(sym)
-  #   doAssert val.kind in {nkStrLit..nkTripleStrLit}
-  #   echo sym.name.s , " = ", val.strVal
-
   interpreter.destroyInterpreter()
+
+
+
+proc run*( plugin: Plugin ) =
+    if plugin.function != "":
+      run_function( plugin )
+    else:
+      run_script( plugin )

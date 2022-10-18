@@ -5,14 +5,19 @@ import core/macros
 import pure/collections/tables
 import strutils
 import sequtils
+import json
 
 ## Forward declarations of routines implemented in ./routines.nim
-proc getFromContext*( path: string ): string = discard
-proc setInContext*( path: string, value: string ) = discard
+proc context_get*( path: string ): string = discard
+proc context_set_bool*( path: string, value: bool ) = discard
+proc context_set_int*( path: string, value: int ) = discard
+proc context_set_float*( path: string, value: float ) = discard
+proc context_set_string*( path: string, value: string ) = discard
 proc readFile*( path: string ): string = discard
 proc exec*( command: string ): int = discard
 proc exe*( command: string ): string = discard
 proc writeFile*( file_name, text: string ) = discard
+proc setParsingContext*( text: string ) = discard
 
 type
   LogLevel* = enum
@@ -53,6 +58,7 @@ var
 # Context stack
 proc push_parsing_context*( context: string ) =
   parsing_context.add context
+  setParsingContext( parsing_context.join(" - ") )
 
 proc pop_parsing_context*() =
   if parsing_context.len > 1:
@@ -106,7 +112,7 @@ const
   RESET =    "\u001b[0m"
 
 template colored_printline( color: string, header: string, message: string, context: string = " \"" & get_parsing_context() & "\"" ) =
-  echo "\u001b[40m" & color & header & GREY & ": " & TEXT & message & RESET & GREY & context & RESET & "\n"
+  echo "\u001b[40m" & color & header & GREY & ": " & TEXT & message & RESET & GREY & context & RESET
 
 template notice*( parts: varargs[string, `$`] ) =
   if log_level <= lvlNotice:
@@ -150,20 +156,22 @@ template debug*( parts: varargs[string, `$`] ) =
     )
 
 ## Context manipulation
-proc ctx_set( path:string, value:any ) =
-  setInContext( path, $value )
+proc context_set( path:string, value:bool ) = context_set_bool( path, value )
+proc context_set( path:string, value:int ) = context_set_int( path, value )
+proc context_set( path:string, value:float ) = context_set_float( path, value )
+proc context_set( path:string, value:any ) = context_set_string( path, $value )
 
 proc ctx_get( path:string, kind:int ): int =
-  parseInt( getFromContext( path ))
+  parseInt( context_get( path ))
 
 proc ctx_get( path:string, kind:float ): float =
-  parseFloat( getFromContext( path ))
+  parseFloat( context_get( path ))
 
 proc ctx_get( path:string, kind:bool ): bool =
-  parseBool( getFromContext( path ))
+  parseBool( context_get( path ))
 
 proc ctx_get( path:string, kind:any ): string =
-  getFromContext( path )
+  context_get( path )
 
 proc unroll( val: NimNode ): string =
     if val.kind == nnkIdent:

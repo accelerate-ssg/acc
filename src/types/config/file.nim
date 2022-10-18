@@ -7,7 +7,7 @@ import logger
 import types/config
 import types/plugin
 import types/config/DAG
-import types/config/paths
+import types/config/path_helpers
 
 type
   Section = enum
@@ -92,6 +92,8 @@ proc parse_plugin_config(): Plugin =
       case event.scalarContent:
       of "name":
         result.name = parse_string_value( "The value of \"name\" should be a string" )
+        if result.name.starts_with('@'):
+          result.function = result.name[1..^1]
       of "script":
         result.script = parse_string_value( "The value of \"script\" should be a string" )
       of "before":

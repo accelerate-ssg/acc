@@ -1,4 +1,4 @@
-from os import fileExists, dirExists, absolutePath, normalizedPath, `/`
+from os import getAppDir, fileExists, dirExists, absolutePath, normalizedPath, `/`
 import strutils
 import docopt
 
@@ -6,6 +6,7 @@ import logger
 from types/plugin/utils import get_plugin_name
 import types/plugin
 import types/config
+from version import application_version
 
 const
   help* = staticRead "help_message.txt"
@@ -22,9 +23,9 @@ proc set_key_if_exists( config: var Config, key: string, value: Value ) =
     echo "Got exception ", repr(e), " with message ", msg
 
 proc add_cli_options_to_config*( config: var Config ) =
-  let version = "Accelerate 0.1.0, built at " & CompileDate & " " & CompileTime & " using Nim " & NimVersion
+  let version_string = "Accelerate " & application_version & ", built at " & CompileDate & " " & CompileTime & " using Nim " & NimVersion
   var args: Table[string, Value]
-  args = docopt(help, version = version )
+  args = docopt(help, version = version_string )
 
   debug $args, "cli_options"
 
@@ -54,7 +55,11 @@ proc add_cli_options_to_config*( config: var Config ) =
     for index, path in args["SCRIPT"]:
       var plugin = init_plugin()
       plugin.name = get_plugin_name( path, "Plugin" & $(index+1) )
-      plugin.script = path
+      error plugin.name
+      if plugin.name.starts_with('@'):
+        plugin.function = plugin.name[1..^1]
+      else:
+        plugin.script = path
       config.plugins.add( plugin )
     config.set_key_if_exists( "source_directory", args["--directory"] )
 

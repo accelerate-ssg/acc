@@ -1,29 +1,17 @@
+{.used.}
+
 import compiler/[ast, nimeval, renderer]
 import strutils
-import sequtils, sugar
 import tables
+import json
 
 import logger
 import global_state
 
 
-proc context_path_contains_segment( path:string ):bool =
+proc path_contains( path:string ):bool =
   let
-    test_value = state.current_plugin.config.get_or_default( "context_path_contains_segment", "" )
-
-    context_path_atoms = test_value.split( "." )
-    path_atoms = path.split( "." )
-
-    allow_any = test_value == "*"
-    not_empty = not test_value.isEmptyOrWhitespace
-    path_match = path_atoms.all_it( context_path_atoms.contains( it ))
-
-  return allow_any or ( not_empty and path_match )
-
-
-proc context_path_contains_string( path:string ):bool =
-  let
-    test_value = state.current_plugin.config.get_or_default( "context_path_contains_string", "" )
+    test_value = state.current_plugin.config.get_or_default( "path_contains", "" )
 
     allow_any = test_value == "*"
     not_empty = not test_value.isEmptyOrWhitespace
@@ -32,40 +20,60 @@ proc context_path_contains_string( path:string ):bool =
   return allow_any or ( not_empty and path_match )
 
 
-proc content_starts_with( beginning:string ):bool =
-  let
-    test_value = state.current_plugin.config.get_or_default( "content_starts_with", "" )
+proc content_starts_with( content:string ):bool =
+  let test_value = state.current_plugin.config.get_or_default( "content_starts_with", "" )
 
-    allow_any = test_value == "*"
-    not_empty = not test_value.isEmptyOrWhitespace
-    content_match = beginning.contains( test_value )
+  # Matches anything
+  if test_value == "*":
+    return true
 
-  return allow_any or ( not_empty and content_match )
+  if test_value.is_empty_or_whitespace:
+    return false
+
+  return content.starts_with( test_value )
 
 
 proc matches( path, content:string ):bool =
-  let
-    len = state.current_plugin.config.get_or_default( "content_starts_with", "" ).len
+  return content_starts_with( content ) or
+         path_contains( path )
 
-  return content_starts_with( content[ 0 .. len-1 ] ) or
-         context_path_contains_segment( path ) or
-         context_path_contains_string( path )
+proc for_each_member( node: JsonNode, callback: proc, path_prefix:string = "" ) =
+  if node.kind == JObject:
+    for key, content in node.pairs:
+      content.for_each_member( callback, path_prefix & "." & key ):
+  elif node.kind == JArray:
+    for index, content in node.elems.pairs:
+      content.for_each_member( callback, path_prefix & "[" & $index & "]" ):
+  else:
+    var
+      content: string
+    case node.kind:
+      of JString:
+        content = node.getStr
+      of JInt:
+        content = $node.getInt
+      of JBool:
+        content = $node.getBool
+      of JFloat:
+        content = $node.getFloat
+      else:
+        content = $node
+    callback(path_prefix, content)
 
 
 proc for_each_field*( interpreter: Interpreter, callback_proc: PSym ) =
-  var
-    keys:seq[ string ] = @[]
-
-  for path, content in state.context.pairs:
-    if matches( path, content ):
-      let
-        response = interpreter.callRoutine(
+  state.context.for_each_member(
+    proc (path, content: string) =
+      if matches( path, content ):
+        warn path, " (or its content) matches."
+        discard interpreter.callRoutine(
           callback_proc,
           [
             newStrNode( nkStrLit, path ),
             newStrNode( nkStrLit, content )
           ]
         )
+  )
 
 
 # Global registry export

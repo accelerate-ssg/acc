@@ -1,3 +1,6 @@
+when defined(nimHasUsed):
+  {.used.}
+
 import strutils
 import terminal
 import colors
@@ -42,7 +45,7 @@ const
 template s( bg: Option[ Color ], fg: Option[ Color ], txt: string ): Segment =
   Segment( background_color: bg, foreground_color: fg, text: txt )
 
-template colored_printline( color: Color, header: string, message: string, context: string = " \"" & get_parsing_context() & "\"\n" ) =
+template colored_printline( color: Color, header: string, message: string, context: string = " in context \"" & get_parsing_context() & "\"\n" ) =
   stdout.set_background_color( BLACK )
   stdout.set_foreground_color( color )
   stdout.write header

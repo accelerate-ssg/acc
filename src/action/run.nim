@@ -1,4 +1,4 @@
-# Run any named script or scripts.
+import logger
 import global_state
 import run_plugins
 

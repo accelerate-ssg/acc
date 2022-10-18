@@ -1,3 +1,4 @@
+import os
 import system
 import tables
 import re
@@ -14,14 +15,15 @@ proc get_plugin_meta*( path: string ):Table[string, string] =
   var line: TaintedString
   var matches: array[2, string]
   var meta: Table[string, string]
-  let file = open( path )
   let regex = re("^\\s*(\\w+):\\s*\"(.+)\"$")
 
-  defer: file.close()
+  if fileExists( path ):
+    let file = open( path )
+    defer: file.close()
 
-  while file.read_line( line ):
-    if match( line, regex, matches):
-      meta[matches[0]] = matches[1]
+    while file.read_line( line ):
+      if match( line, regex, matches):
+        meta[matches[0]] = matches[1]
 
   if meta.empty():
     debug "No meta found for ", path

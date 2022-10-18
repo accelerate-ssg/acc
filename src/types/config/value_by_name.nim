@@ -1,7 +1,6 @@
 import strutils
 import tables
 
-import logging
 import types/config
 
 proc `[]`*( config: Config, field: string ):string =

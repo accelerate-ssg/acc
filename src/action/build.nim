@@ -7,7 +7,7 @@ import sequtils
 import logger
 import global_state
 import run_plugins
-import types/config/paths
+import types/config/path_helpers
 
 proc add_all_files_to_state() =
   let root = state.config.workspace_directory()

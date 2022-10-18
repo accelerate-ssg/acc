@@ -2,7 +2,6 @@ import std / os
 import tables
 import re
 import strutils
-import sequtils
 
 import logger
 import types/config

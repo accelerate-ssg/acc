@@ -2,6 +2,7 @@ import os
 import strutils
 import times
 import tables
+import json
 
 import logger
 import global_state
@@ -15,16 +16,18 @@ proc run_plugins*( state: State ) =
   echo ""
   for index, plugin in state.config.plugins:
     if file_exists( state.config.map["source_directory"] / plugin.script ):
-      debug "Found ", state.config.map["source_directory"] / plugin.script
+      debug "Found source dir relative ", state.config.map["source_directory"] / plugin.script
       state.config.plugins[ index ].script = state.config.map["source_directory"] / plugin.script
     elif file_exists( plugin.script ):
-      debug "Found ", plugin.script
+      debug "Found exec relative ", plugin.script
+    elif plugin.function != "":
+      debug "Found function ", plugin.function
     else:
       missing_scripts.add( plugin.name & " (" & plugin.script & ")" )
 
   # If we failed to find any script then list the missing files and quit
   if missing_scripts.len > 0:
-    error "Can't find the following script(s):\n", missing_scripts.join("\n").indent(4)
+    error "Can't find the following script(s):\n", missing_scripts.join("\n").indent(4), "\n"
     notice "Build aborted"
     quit(-1)
 
@@ -37,5 +40,7 @@ proc run_plugins*( state: State ) =
     let plugin_start_time = epoch_time()
     plugin.run()
     info plugin.name, " finished in ", format_float( epoch_time() - plugin_start_time, format = ffDecimal, precision = 2), " seconds."
+    echo ""
+    fatal $state.context
   echo ""
   notice "Build finished in ", format_float( epoch_time() - start_time, format = ffDecimal, precision = 2), " seconds."
