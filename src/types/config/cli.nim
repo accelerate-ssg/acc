@@ -1,4 +1,5 @@
-from os import getAppDir, fileExists, dirExists, absolutePath, normalizedPath, `/`
+import system
+from os import getAppDir, fileExists, dirExists, expandFilename, absolutePath, normalizedPath, `/`
 import strutils
 import docopt
 
@@ -15,8 +16,8 @@ proc set_key_if_exists( config: var Config, key: string, value: Value ) =
   let path = $value
   try:
     if path != "" and (fileExists( path ) or dirExists( path )):
-      config.map[ key ] = absolutePath( normalizedPath( path ))
-  except:
+      config.map[ key ] = absolutePath( normalizedPath( path )).expandFilename()
+  except CatchableError:
     let
       e = getCurrentException()
       msg = getCurrentExceptionMsg()
@@ -29,22 +30,22 @@ proc add_cli_options_to_config*( config: var Config ) =
 
   debug $args, "cli_options"
 
-  if args["build"]:
+  if args["build"] or args["dev"]:
     if args["--test"]:
       config.action = ActionTest
     else:
-      config.action = ActionBuild
+      config.action = if args["build"]: ActionBuild else: ActionDev
 
     config.set_key_if_exists( "blacklist", args["--exclude"] )
     config.set_key_if_exists( "local_config_path", args["--config"] )
     config.set_key_if_exists( "source_directory", args["SOURCE_DIR"] )
 
     if $args["--output"] == "SOURCE_DIR/build":
-      config.map["destination_directory"] = config.map["source_directory"] / "build"
+      config.map["destination_directory"] = config.map["source_directory"] / DEFAULT_BUILD_DIRECTORY
     else:
       config.map["destination_directory"] = $args["--output"]
 
-    config.map["workspace_directory"] = config.map["destination_directory"] / ".acc"
+    config.map["workspace_directory"] = config.map["destination_directory"] / DEFAULT_WORKSPACE_DIRECTORY
 
   if args["clean"]:
     config.action = ActionClean

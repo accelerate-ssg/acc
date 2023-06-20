@@ -20,6 +20,7 @@ your own using Accelerates DSL and Nimscript. For more information read the
 Github readme: https://github.com/accelerate-ssg/acc#readme
 
 Usage:
+  acc dev [options] [--test] [--exclude FILE] [--config FILE] [--] SOURCE_DIR...
   acc build [options] [--test] [--exclude FILE] [--config FILE] [--] SOURCE_DIR...
   acc clean [options]
   acc run [options] SCRIPT...
@@ -31,10 +32,10 @@ Arguments:
   FILE                 A path to a file, fully qualified or relative
   SCRIPT               A path to a .nims file, fully qualified or relative
 
-Build/Test specific options:
+Build/Dev/Test specific options:
   -t, --test           Dry run, test config and setup, but do not run plugins
   -e, --exclude FILE   Path to a .gitignore style blacklist
-  -c, --config FILE    Specify path to config [default: SOURCE_DIR/config.yaml]
+  -c, --config FILE    Specify path to config [default: SOURCE_DIR/.acc/config.yaml]
   -o. --output DIR     Output directory [default: SOURCE_DIR/build]
 
 Clean specific options:

@@ -1,25 +1,23 @@
 import compiler/[nimeval, llstream, lineinfos, options, renderer, msgs]
 import os
 import strutils
-import macros
-import sequtils
-import tables
+import sets
 
 import logger
 import types/plugin
 import script/routines
-import action/internal_functions/mustache_renderer
+import action/internal_functions/[mustache_renderer, yaml_loader, markdown_renderer]
 import global_state
 
 # Read the filenames in ./callbacks at compile time
-const CT_callbacks_string = staticExec("ls -1 callbacks")
+# const CT_callbacks_string = staticExec("ls -1 callbacks")
 
-macro importFolder() =
-  result = newStmtList()
-  for file in CT_callbacks_string.splitLines:
-    result.add(parseStmt("import script/callbacks/" & file[0..^5]))
+# macro importFolder() =
+#   result = newStmtList()
+#   for file in CT_callbacks_string.splitLines:
+#     result.add(parseStmt("import script/callbacks/" & file[0..^5]))
 
-importFolder
+# importFolder
 
 const
   api_implementation = staticRead "script/api_impl.nim"
@@ -84,6 +82,10 @@ proc run_function*( plugin: Plugin ) =
   case plugin.function:
     of "mustache":
       mustache_renderer.run( plugin )
+    of "yaml":
+      yaml_loader.run( plugin )
+    of "markdown":
+      markdown_renderer.run( plugin )
     else:
       error "Unknown internal function \"", plugin.function, "\""
 
@@ -124,18 +126,19 @@ proc run_script*( plugin: Plugin ) =
   stream.inject_api_implementation_lines()
   interpreter.evalScript( stream )
 
+  # TODO: Reimplement callbacks from script files.
   # Convert compile time list of files into list of callback proc names
-  const file_names = CT_callbacks_string.split("\n")
-  let callbacks = file_names.mapIt( it.splitFile.name )
+  # const file_names = CT_callbacks_string.split("\n")
+  # let callbacks = file_names.mapIt( it.splitFile.name )
 
   # Using that list of available callbacks, check for them in the script context
-  for callback in callbacks:
-    let
-      callback_proc = interpreter.selectRoutine( callback )
+  # for callback in callbacks:
+  #   let
+  #     callback_proc = interpreter.selectRoutine( callback )
 
-    if callback_proc != nil:
-      let fun = state.registry[ callback ]
-      fun( interpreter, callback_proc )
+  #   if callback_proc != nil:
+  #     let fun = state.registry[ callback ]
+  #     fun( interpreter, callback_proc )
 
   interpreter.destroyInterpreter()
 

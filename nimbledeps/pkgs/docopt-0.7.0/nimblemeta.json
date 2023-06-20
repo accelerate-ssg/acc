@@ -1,1 +1,1 @@
-{"url":"https://github.com/docopt/docopt.nim","files":["/docopt.nimble","/docopt/util.nim","/docopt.nim","/docopt/dispatch.nim","/docopt/value.nim"],"binaries":[],"isLink":false}
+{"url":"https://github.com/docopt/docopt.nim","files":["/docopt/value.nim","/docopt.nim","/docopt/util.nim","/docopt.nimble","/docopt/dispatch.nim"],"binaries":[],"isLink":false}

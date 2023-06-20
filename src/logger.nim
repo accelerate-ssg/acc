@@ -45,7 +45,7 @@ const
 template s( bg: Option[ Color ], fg: Option[ Color ], txt: string ): Segment =
   Segment( background_color: bg, foreground_color: fg, text: txt )
 
-template colored_printline( color: Color, header: string, message: string, context: string = " in context \"" & get_parsing_context() & "\"\n" ) =
+template colored_printline*( color: Color, header: string, message: string, context: string = " in context \"" & get_parsing_context() & "\"\n" ) =
   stdout.set_background_color( BLACK )
   stdout.set_foreground_color( color )
   stdout.write header
@@ -56,26 +56,41 @@ template colored_printline( color: Color, header: string, message: string, conte
   stdout.set_foreground_color( GREY )
   stdout.write context
 
+template with_label(default_label: string, parts: varargs[string], msg, body: untyped) =
+  var msg: string
+  var label {.inject.} = default_label
+  var p = @parts
+  if parts.len > 0 and parts[0].startsWith("[") and parts[0].endsWith("]"):
+    label = parts[0]
+    p = p[1..^1]
+  msg = p.join( "" )
+  block:
+    body
 
 template notice*( parts: varargs[string, `$`] ) =
   if log_level <= lvlNotice:
-    colored_printline( BLUE, " [INFO]", parts.join( "" ));
+    with_label(" [INFO]", parts, message):
+      colored_printline( BLUE, label, message);
 
 template info*( parts: varargs[string, `$`] ) =
   if log_level <= lvlInfo:
-    colored_printline( BLUE, "    [i]", parts.join( "" ));
+    with_label("    [i]", parts, message):
+      colored_printline( BLUE, label, message);
 
 template warn*( parts: varargs[string, `$`] ) =
   if log_level <= lvlWarn:
-    colored_printline( ORANGE, " [WARN]", parts.join( "" ));
+    with_label(" [WARN]", parts, message):
+      colored_printline( ORANGE, label, message);
 
 template error*( parts: varargs[string, `$`] ) =
   if log_level <= lvlError:
-    colored_printline( RED, "[ERROR]", parts.join( "" ));
+    with_label("[ERROR]", parts, message):
+      colored_printline( RED, label, message);
 
-template fatal*( parts: varargs[string, `$`] ) =
+template fatal*(parts: varargs[string, `$`]) =
   if log_level <= lvlError:
-    colored_printline( DARK_RED, "[FATAL]", parts.join( "" ));
+    with_label("[FATAL]", parts, message):
+      colored_printline(DARK_RED, label, message)
 
 template debug*( parts: varargs[string, `$`] ) =
   if log_level <= lvlDebug:

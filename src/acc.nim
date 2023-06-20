@@ -3,7 +3,8 @@ import tables
 import types/config
 import global_state
 import logger
-import action/[build,test,clean,run]
+import action/[build,test,clean,run,dev_server]
+import types/pretty_print
 
 proc ctrl_c_handler() {.noconv.} =
   notice "Force quit."
@@ -14,7 +15,10 @@ proc main() =
   setControlCHook( ctrl_c_handler )
   init_logger()
 
+  debug state.config.pretty()
+
   case state.config.action:
+  of ActionDev: state.dev_server()
   of ActionBuild: state.build()
   of ActionTest: state.test()
   of ActionClean: state.clean()

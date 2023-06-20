@@ -6,8 +6,9 @@ import glob
 import mustache
 import tables
 import strutils
-import json
+import sets
 
+import types/config/path_helpers
 import action/internal_functions/utils
 
 proc search_dirs(plugin: Plugin): seq[string] =
@@ -27,29 +28,6 @@ proc render(context: Context, path: string): string =
 
   result = template_file.render(context)
 
-# proc add( context: var Value, path: string, value: string ) =
-#   var current = context
-#   for part in path.split('.'):
-#     let
-#       last = path.ends_with( part )
-#
-#     if current.has_key( part ):
-#       current = current[ part ]
-#     elif last:
-#       current[ part ] = Value(kind: vkString, vString: value )
-#     else:
-#       current[ part ] = Value(kind: vkTable, vTable: @[] )
-#       current = current[ part ]
-
-#proc load( context: var Context, global_context: Table[string, string] ) =
-#  context.values = global_context
-
-proc convert(node: JsonNode): Table[string, Value] =
-  result = initTable[string, Value]()
-  for key, val in node.pairs:
-    result[key] = val.castValue
-  #result = Value(kind: vkTable, vTable: vTable)
-
 proc run*(plugin: Plugin) =
   var context = new_context(
     searchDirs = plugin.search_dirs(),
@@ -58,13 +36,15 @@ proc run*(plugin: Plugin) =
 
   let glob = plugin.glob()
 
-  #context.load( state.context )
+  for absolute_path in state.config.files:
+    let
+      relative_path = absolute_path.relative_path(state.config.workspace_directory)
 
-  for (absolute, relative) in state.config.files.each:
-    if relative.matches(glob):
+    if relative_path.matches(glob):
       let
-        original = split_file(relative)
-        new_name = state.config.map["destination_directory"] / original.dir /
-            add_file_ext(original.name, "html")
-      notice "Rendering: ", absolute, " as ", new_name
-      write_file(new_name, context.render(absolute))
+        relative = relative_path.split_file()
+        file_name = relative.name.add_file_ext("html")
+        destination_path = state.config.destination_directory / relative.dir / file_name
+            
+      notice "Rendering: ", absolute_path, " as ", destination_path
+      write_file(destination_path, context.render(absolute_path))

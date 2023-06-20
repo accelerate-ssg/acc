@@ -12,7 +12,7 @@ proc empty( table: Table[string, string] ):bool =
   not meta_keys.any( key => table.has_key( key ))
 
 proc get_plugin_meta*( path: string ):Table[string, string] =
-  var line: TaintedString
+  var line: string
   var matches: array[2, string]
   var meta: Table[string, string]
   let regex = re("^\\s*(\\w+):\\s*\"(.+)\"$")

@@ -37,13 +37,13 @@ proc matches( path, content:string ):bool =
   return content_starts_with( content ) or
          path_contains( path )
 
-proc for_each_member( node: JsonNode, callback: proc, path_prefix:string = "" ) =
+proc for_each_member( node: JsonNode, callback: proc, current_dotted_path:string = "" ) =
   if node.kind == JObject:
     for key, content in node.pairs:
-      content.for_each_member( callback, path_prefix & "." & key ):
+      content.for_each_member( callback, current_dotted_path & "." & key ):
   elif node.kind == JArray:
     for index, content in node.elems.pairs:
-      content.for_each_member( callback, path_prefix & "[" & $index & "]" ):
+      content.for_each_member( callback, current_dotted_path & "[" & $index & "]" ):
   else:
     var
       content: string
@@ -58,10 +58,10 @@ proc for_each_member( node: JsonNode, callback: proc, path_prefix:string = "" ) 
         content = $node.getFloat
       else:
         content = $node
-    callback(path_prefix, content)
+    callback(current_dotted_path, content)
 
 
-proc for_each_field*( interpreter: Interpreter, callback_proc: PSym ) =
+proc for_each_field*( interpreter: Interpreter, callback_proc: PSym ){.gcsafe, locks: 0.} =
   state.context.for_each_member(
     proc (path, content: string) =
       if matches( path, content ):
@@ -77,4 +77,4 @@ proc for_each_field*( interpreter: Interpreter, callback_proc: PSym ) =
 
 
 # Global registry export
-state.registry["for_each_field"] = for_each_field
+#state.registry["for_each_field"] = for_each_field

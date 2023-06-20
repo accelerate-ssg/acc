@@ -7,7 +7,7 @@ import json
 
 import logger
 import global_state
-import types/config/value_by_name
+import types/config
 
 proc context_get*( args: VmArgs ) = {.gcsafe.}:
   var path = args.getString( 0 )
@@ -68,7 +68,7 @@ proc simpleReadFile*( args: VmArgs ) = {.gcsafe.}:
     args.setResult( content )
   except IOError:
     error "Could not read file ", path
-  except:
+  except CatchableError:
     error "Unknown exception!"
     raise
 

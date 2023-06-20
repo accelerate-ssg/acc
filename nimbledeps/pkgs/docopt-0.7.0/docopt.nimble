@@ -5,7 +5,7 @@ license = "MIT"
 srcDir = "src"
 
 requires "nim >= 0.20.0"
-requires "regex >= 0.11.1"
+requires "regex >= 0.20.0"
 
 task test, "Test":
   exec "nimble c --verbosity:0 -r -y test/test"

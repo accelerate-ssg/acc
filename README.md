@@ -117,11 +117,15 @@ one.
 
 ## Development
 
-Clone then run using `nimble -d:debug -d:nimWorkaround14447 -p:src --threads:off
-run acc run -d ../test_site ../test_site/plugins/test.nims`
+Clone then run using `nimble -d:debug -d:nimDebugDlOpen -p:src --threads:on
+ --mm:orc --deepcopy:on run acc dev ../test_site`
 
 The `acc run -d ../test_site ../test_site/plugins/test.nims` part of the command
 is the binary to build/run and the arguments to it.
+
+## Production build
+
+`nimble build -d:release -p:src --threads:on --mm:orc --deepcopy:on`
 
 # Attribution
 
