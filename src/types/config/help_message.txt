@@ -20,34 +20,41 @@ your own using Accelerates DSL and Nimscript. For more information read the
 Github readme: https://github.com/accelerate-ssg/acc#readme
 
 Usage:
-  acc dev [options] [--test] [--exclude FILE] [--config FILE] [--] SOURCE_DIR...
-  acc build [options] [--test] [--exclude FILE] [--config FILE] [--] SOURCE_DIR...
+  acc init ROOT_DIR...
+  acc dev [options] [--test] [--exclude FILE] [--config FILE] [--] ROOT_DIR...
+  acc build [options] [--test] [--exclude FILE] [--config FILE] [--] ROOT_DIR...
   acc clean [options]
   acc run [options] SCRIPT...
   acc -h | --help
   acc -v | --version
 
 Arguments:
-  SOURCE_DIR           A path to a directory, fully qualified or relative
-  FILE                 A path to a file, fully qualified or relative
-  SCRIPT               A path to a .nims file, fully qualified or relative
+  ROOT_DIR               A path to a directory, fully qualified or relative
+  FILE                   A path to a file, fully qualified or relative
+  SCRIPT                 A path to a valid script file, fully qualified or relative
+  WORKFLOW               The name of a workflow defined in the configuration
 
 Build/Dev/Test specific options:
-  -t, --test           Dry run, test config and setup, but do not run plugins
-  -e, --exclude FILE   Path to a .gitignore style blacklist
-  -c, --config FILE    Specify path to config [default: SOURCE_DIR/.acc/config.yaml]
-  -o. --output DIR     Output directory [default: SOURCE_DIR/build]
+  -t, --test             Dry run, test config and setup, but do not run plugins
+  -e, --exclude FILE     Path to a .gitignore style blacklist
+  -c, --config FILE      Specify path to config [default: ROOT_DIR/$default_config]
+  -s. --src DIR          Source directory [default: ROOT_DIR/$default_source_directory]
+  -w. --work DIR         Workspace directory [default: ROOT_DIR/$default_workspace_directory]
+  -d. --destination DIR  Destination directory [default: ROOT_DIR/$default_destination_directory]
+  -o. --content DIR      Content directory [default: ROOT_DIR/$default_content_directory]
+  -p. --script DIR       Script directory [default: ROOT_DIR/$default_script_directory]
+  -b. --build DIR        Build directory [default: ROOT_DIR/$default_build_directory]
 
 Clean specific options:
-  -k, --keep           Only remove cache and temporary files, leaving final
-                       artefacts alone
+  -k, --keep             Only remove cache and temporary files, leaving final
+                         artefacts alone
 
 Run specific options:
-  -d, --directory DIR  The root directory to run the script in
-  -s, --set key=value  Specify configuration values, these
+  -d, --directory DIR    The root directory to run the script in
+  -s, --set key=value    Specify configuration values, these
 
 Options:
-  -l, --log LEVEL      Set log level. Available levels are: all, debug, info,
-                       warning, fatal and silent. [default: info]
-  -h, --help           Print this help message
-  -v, --version        Print version information
+  -l, --log LEVEL        Set log level. Available levels are: all, debug, info,
+                         warning, fatal and silent. [default: info]
+  -h, --help             Print this help message
+  -v, --version          Print version information

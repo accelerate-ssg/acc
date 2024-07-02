@@ -4,7 +4,7 @@ import global_state
 
 type
   KeyStack = object
-    atoms: seq[string]
+    atoms*: seq[string]
     marks: seq[int]
 
 proc newKeyStack*(): KeyStack =

@@ -1,4 +1,4 @@
-import compiler/[nimeval, llstream, lineinfos, options, renderer, msgs]
+import "$nim"/compiler / [nimeval, llstream, lineinfos, options, renderer, msgs]
 import os
 import strutils
 import sets
@@ -6,7 +6,7 @@ import sets
 import logger
 import types/plugin
 import script/routines
-import action/internal_functions/[mustache_renderer, yaml_loader, markdown_renderer]
+import action/internal_functions/[mustache_renderer, yaml_loader, markdown_renderer, copy]
 import global_state
 
 # Read the filenames in ./callbacks at compile time
@@ -77,9 +77,11 @@ proc inject_api_implementation_lines( stream: PLLStream ) =
 
 proc run_function*( plugin: Plugin ) =
 
-  debug "Running internal function"
+  debug "Running internal function", plugin.function
 
   case plugin.function:
+    of "copy":
+      copy.run( plugin )
     of "mustache":
       mustache_renderer.run( plugin )
     of "yaml":

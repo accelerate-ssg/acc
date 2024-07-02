@@ -1,4 +1,4 @@
-import compiler/[vmdef, vm, renderer]
+import "$nim"/compiler / [vmdef, vm, renderer]
 import tables
 import os
 import osproc

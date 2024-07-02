@@ -1,24 +1,23 @@
-import asynchttpserver, asyncdispatch, os, strutils, threadpool, tables, ws, atomics, random, sequtils, locks, json, terminal
-import libfswatch
-import libfswatch/fswatch
+import asynchttpserver, asyncdispatch, os, strutils, ws, atomics, random, sequtils, locks, json, terminal
 
 import global_state
 import logger
 import build
 import types/config/path_helpers
 
-import dev_server/mime_types
+import dev_server/[mime_types,fswatch]
 
 const
   reload_script = static_read "dev_server/force_reload.js"
   file_not_found = static_read "dev_server/file_not_found.html"
-  wait_time = 10
   chars = {'A'..'F','0'..'9'}.toSeq
 
 var
   reload_flag: Atomic[bool]
+  wait_time = 10
   websocket: WebSocket
   lock: Lock
+  build_running = false
 
 # Generate a random ID to be able to distinguish between different WebSocket
 # connections
@@ -133,8 +132,10 @@ proc context_as_json(): string {.gcsafe.} =
 
 # Process normal HTTP requests
 proc process_request( request: Request, root_dir: string, source_root: string ) {.async, gcsafe.} =
+  warn "Got request"
+
   var
-    path = root_dir / request.url.path
+    path: string
     status = Http200
     content = ""
     headers = {
@@ -145,26 +146,28 @@ proc process_request( request: Request, root_dir: string, source_root: string ) 
 
   let
     about_context = request.url.path == "/about:context"
+    paths = [
+      root_dir / request.url.path,
+      # If the request is for the root, try to serve index.html
+      root_dir / request.url.path / "index.html", 
+      # Check if it is a file withouth an extension, if so, try to serve it as
+      # an HTML file
+      root_dir / request.url.path & ".html",
+      # If it still doesn't exist try and load it from the build root
+      # Chanses are it's a resource we haven't copied over to the build directory
+      # TODO: Add a way to copy over resources from the source directory to the
+      # build directory
+      source_root / request.url.path
+    ]
 
-  # If the request is for the root, try to serve index.html
-  if not existing_file:
-    path = root_dir / request.url.path / "index.html"
+  for local_path in paths:
+    path = local_path
     existing_file = fileExists(path)
-
-  # Check if it is a file withouth an extension, if so, try to serve it as
-  # an HTML file
-  if not existing_file:
-    path = root_dir / request.url.path & ".html"
-    existing_file = fileExists(path)
-
-  # If it still doesn't exist try and load it from the build root
-  # Chanses are it's a resource we haven't copied over to the build directory
-  # TODO: Add a way to copy over resources from the source directory to the
-  # build directory
-  if not existing_file:
-    path = get_current_dir() / request.url.path
-    existing_file = fileExists(path)
-    warn "Looking for: ", path, ", exists: ", $existing_file
+    if existing_file:
+      warn "Found: ", path
+      break;
+    else:
+      warn "Didn't find: ", path
 
   if about_context:
     headers["content-type"] = "application/json; charset=utf-8"
@@ -183,7 +186,7 @@ proc process_request( request: Request, root_dir: string, source_root: string ) 
     let
       file_tree = html_tree_from_dir(root_dir)
     
-    content = file_not_found.replace("{file_tree}", file_tree).replace("{file_tree_root}", root_dir.absolute_path )
+    content = file_not_found.replace("{reload_script}", reload_script).replace("{file_tree}", file_tree).replace("{file_tree_root}", root_dir.absolute_path )
     status = Http404
 
   await request.respond(status, content, headers)
@@ -191,10 +194,15 @@ proc process_request( request: Request, root_dir: string, source_root: string ) 
 # Main asynchttpserver handler, just delegates to the WebSocket or normal
 # request handler
 proc handle_request( root_dir: string, source_root: string ): (proc( request: Request) {.async, gcsafe.}) =
+  warn "Starting up web request handler"
   return proc(request: Request) {.async, gcsafe.} =
     if request.url.path == "/ws":
+      warn "[Websocket request]"
+      echo "Websocket request"  
       await process_websocket(request)
     else:
+      warn "[HTTP request]"
+      echo "HTTP request"
       await process_request(request, root_dir, source_root)
 
 # Callback for the file system watcher.
@@ -210,54 +218,21 @@ proc file_change_callback(event: fsw_cevent, event_num: cuint)  =
     if event.path == nil:
       debug "Change detected, but path is null"
       return
-
-    let
-      relative_path = relative_path( $event.path, state.config.source_directory )
-      relative_destination_directory = relative_path( state.config.destination_directory, state.config.source_directory )
-
-    # If the change occured in the build directory, ignore it
-    if relative_path.starts_with( relative_destination_directory ):
+    if build_running == true:
+      debug "Change detected, but a build is already running"
       return
 
+    build_running = true
     debug "Change detected: ", event.path
 
     build( state )
     reload_flag.store(true)
+    build_running = false
       
   except CatchableError:
     debug "Exception in file_change_callback"
   finally:
     set_parsing_context(old_parsing_context)
-
-# Start the file system monitor. This is run in a separate thread.
-proc start_monitor(file_system_change_monitor: Monitor):bool {.thread.} =
-  file_system_change_monitor.start()
-  return true
-
-# Watch for changes in the source directory
-# Spawns a separate thread for the fswatch monitor so that we can await it
-# together with the server in the main proc.
-proc watch_changes(path: string) {.async.} =
-  var
-    monitor_thread: FlowVar[bool]
-
-  let
-    file_system_change_monitor = new_monitor()
-
-  file_system_change_monitor.add_path(path)
-  file_system_change_monitor.set_callback(file_change_callback)
-  debug "Watching ", path
-  
-  monitor_thread = spawn start_monitor(file_system_change_monitor)
-
-  while true:
-    # If the monitor thread has stopped, ie something went wrong, stops the
-    # server.
-    # TODO: Add a way to restart the monitor if it stops.
-    if monitor_thread.is_ready():
-      debug "Monitor stopped"
-      break
-    await sleep_async(wait_time)
   
 # Start the development server.
 # This is the main proc that is called from the main module.
@@ -268,18 +243,21 @@ proc dev_server*( state: State ) =
     current_dir = get_current_dir()
     server_root_dir = relative_path(state.config.destination_directory, current_dir)
     source_root = relative_path(state.config.source_directory, current_dir)
+    port = 1331
 
   # Initialize the global state
   randomize()
   init_lock(lock)
   reload_flag.store(true)
 
-  info "Starting development server at http://0.0.0.0:1331"
+  info "╔══════════════════════════════════════════════════════╗"
+  info "║  Starting development server at http://0.0.0.0:" & $port & "  ║"
+  info "╚══════════════════════════════════════════════════════╝"
 
   build( state )
 
   # Start the server and the file system monitor
   waitFor all(
-    server.serve(Port(1331), handle_request(server_root_dir, source_root)),
-    watch_changes(state.config.source_directory)
+    server.serve(Port(port), handle_request(server_root_dir, source_root)),
+    watch( state.config.source_directory, file_change_callback )
   )

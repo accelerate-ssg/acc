@@ -45,10 +45,10 @@ proc for_each_matching_member( node: JsonNode, callback: proc, current_dotted_pa
 
   if node.kind == JObject:
     for key, content in node.pairs:
-      content.for_each_matching_member( callback_if_matches, current_dotted_path & "." & key ):
+      content.for_each_matching_member( callback_if_matches, current_dotted_path & "." & key )
   elif node.kind == JArray:
     for index, content in node.elems.pairs:
-      content.for_each_matching_member( callback_if_matches, current_dotted_path & "[" & $index & "]" ):
+      content.for_each_matching_member( callback_if_matches, current_dotted_path & "[" & $index & "]" )
   else:
     var
       content: string

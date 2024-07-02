@@ -9,7 +9,7 @@ proc clean*( global_state: State ) =
   let workspace_directory = state.config.map["workspace_directory"]
   let keep_artifacts = state.config.map["keep_artifacts"] == "true"
 
-  if keep_artifacts:
-    workspace_directory.removeDir
-  else:
+  workspace_directory.removeDir
+  
+  if not keep_artifacts:
     destination_directory.removeDir

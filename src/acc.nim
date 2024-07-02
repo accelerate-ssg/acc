@@ -3,12 +3,12 @@ import tables
 import types/config
 import global_state
 import logger
-import action/[build,test,clean,run,dev_server]
+import action/[build,test,clean,run,dev_server,init]
 import types/pretty_print
 
 proc ctrl_c_handler() {.noconv.} =
   notice "Force quit."
-  warn "Incomplete artifacts might be left in the build directory ", state.config.map["destination_directory"], "."
+  warn "Incomplete artifacts might be left in the build directory ", state.config.map["workspace_directory"], "."
   quit 0
 
 proc main() =
@@ -23,6 +23,7 @@ proc main() =
   of ActionTest: state.test()
   of ActionClean: state.clean()
   of ActionRun: state.run()
+  of ActionInit: state.init()
   of ActionNone: discard
 
   quit(0)

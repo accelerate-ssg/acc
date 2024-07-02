@@ -2,11 +2,9 @@ import std / os
 import tables
 import re
 import strutils
-import sets
 
 import logger
 import types/config
-import types/plugin
 import types/config/[file, cli]
 
 proc init_config*(): Config =
@@ -14,11 +12,13 @@ proc init_config*(): Config =
   result.map = initTable[string, string]()
   result.map["global_config_path"] = get_home_dir() / DEFAULT_CONFIG_PATH
   result.map["current_directory_path"] = get_current_dir()
+  result.map["root_directory"] = ""
   result.map["source_directory"] = ""
   result.map["destination_directory"] = ""
   result.map["workspace_directory"] = ""
   result.map["local_config_path"] = ""
-  result.map["content_root"] = "content"
+  result.map["script_directory"] = ""
+  result.map["content_directory"] = ""
   result.map["keep_artifacts"] = "false"
   result.action = ActionNone
   result.log_level = lvlInfo
@@ -33,6 +33,5 @@ proc init_config*(): Config =
       (re"[^\w ]+", ""),    # Remove any non-word characters, like #€% etc
       (re"[^a-z0-9]+", "-") # Replace any non-letter or number sequence with "-"
     ])
-    result.files = initHashSet[Path]()
   else:
     discard

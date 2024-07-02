@@ -7,22 +7,18 @@ import sequtils
 import "$nim"/compiler / [renderer]
 
 import logger
+import types/state as state_type
 import types/config
 import types/config/init
+import types/render_state/calculate
 import types/plugin
 
-type
-  ContextKeyFormatError* = object of ValueError
-  ContextNodeAssignmentError* = object of ValueError
-  State* = ref object
-    context*: JsonNode
-    config*: Config
-    #registry*: Table[ string, proc( interpreter: Interpreter, callback_proc: PSym ){.gcsafe, locks: 0.}]
-    current_plugin*: Plugin
+export State
 
 var state* = State(
   config: init_config(),
   context: newJObject(),
+  render_state: @[],
   #registry: initTable[ string, proc( interpreter: Interpreter, callback_proc: PSym ){.gcsafe, locks: 0.}](),
   current_plugin: Plugin()
 )
@@ -69,6 +65,16 @@ proc `{}=`*(state: State, keys: varargs[string], value: JsonNode) =
 proc `{}=`*(state: State, path: string, value: JsonNode) =
   state{ path.split('.') } = value
 
+proc `{}`*(state: State, keys: varargs[string] ): JsonNode =
+  result = state.context
+
+  for key in keys:
+    result = result{key}
+    if result == nil or result.kind == JNull:
+      return newJNull()
+
+proc `{}`*(state: State, path: string ): JsonNode =
+  state{ path.split('.') }
 
 
 proc diff*(new_context, old_context: JsonNode): JsonNode =

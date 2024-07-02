@@ -12,10 +12,13 @@ import types/config/path_helpers
 import action/internal_functions/utils
 
 proc search_dirs(plugin: Plugin): seq[string] =
-  result = @["./"]
+  result = @["./", state.config.source_directory]
   if plugin.config.has_key("search_dirs"):
     for path in plugin.config["search_dirs"].split(','):
       result.add(path.strip)
+  for path in result:
+    let
+      file_path = path / "partials/main_nav.mustache" 
 
 proc glob(plugin: Plugin): Glob =
   result = glob("*.mustache")
@@ -34,17 +37,42 @@ proc run*(plugin: Plugin) =
     values = state.context.toValues()
   )
 
-  let glob = plugin.glob()
+  let
+    glob = plugin.glob()
+    build_dir = state.config.build_directory
 
-  for absolute_path in state.config.files:
+  for render_item in state.render_state:
     let
-      relative_path = absolute_path.relative_path(state.config.workspace_directory)
+      absolute_path = build_dir / render_item.source_path
 
-    if relative_path.matches(glob):
+    if render_item.source_path.matches(glob):
       let
-        relative = relative_path.split_file()
-        file_name = relative.name.add_file_ext("html")
-        destination_path = state.config.destination_directory / relative.dir / file_name
-            
-      notice "Rendering: ", absolute_path, " as ", destination_path
+        destination_path = state.config.destination_directory / render_item.output_path
+
+      if not destination_path.parentDir.dirExists():
+        destination_path.parentDir.createDir()
+
+      context["debug"] = proc (s: string, c: Context): string =
+        return $c[ s.strip ]
+      context["length"] = proc (s: string, c: Context): string =
+        try:
+          let
+            value = c[ s ]
+          case value.kind
+          of vkInt,vkFloat32,vkFloat64,vkBool:
+            return ""
+          of vkString:
+            return $value.vString.len
+          of vkSeq:
+            return $value.vSeq.len
+          of vkTable:
+            return $value.vTable.len
+          else:
+            return "0"
+        except KeyError:
+          return "0"
+      context["item"] = render_item.item
+      context["items"] = render_item.items
+
+
       write_file(destination_path, context.render(absolute_path))

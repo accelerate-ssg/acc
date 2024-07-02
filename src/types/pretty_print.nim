@@ -8,7 +8,7 @@ import sets
 
 import plugin
 import config
-import global_state
+import types/state
 
 proc pretty*( plugin: Plugin, spaces: int = 0 ): string =
   var config_strings: seq[string] = @[]
@@ -39,9 +39,9 @@ proc pretty*(config: Config, spaces: int = 0 ): string =
   for key, value in config.map.pairs:
     map_strings.add( &"{key}: {value}" )
 
-  var plugin_strings: seq[string] = @[]
+  var script_strings: seq[string] = @[]
   for plugin in config.plugins:
-    plugin_strings.add( plugin.pretty(spaces + 2) )
+    script_strings.add( plugin.pretty(spaces + 2) )
 
   var file_strings: seq[string] = @[]
   for file in config.files:
@@ -55,7 +55,7 @@ proc pretty*(config: Config, spaces: int = 0 ): string =
   log_level: {config.log_level}
   {map_strings.join( "\n  " )}
   plugins: [
-    {plugin_strings.join( ",\n  " )}
+    {script_strings.join( ",\n  " )}
   ]
   files: [
     {file_strings.join( ",\n    " )}
