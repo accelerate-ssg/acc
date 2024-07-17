@@ -12,7 +12,7 @@ bin = @["acc"]
 
 requires "regex >= 0.20.2"
 requires "nim >= 2.0.6"
-requires "yaml >= 1.0.0"
+requires "yaml >= 2.0.0"
 requires "cligen >= 1.6.0"
 requires "regex >= 0.19.0"
 requires "docopt >= 0.7.0"
