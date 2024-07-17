@@ -6,7 +6,6 @@ description = "The Acc static site tools"
 license = "GPL-3.0"
 srcDir = "src"
 bin = @["acc"]
-paths = @[".","src"]
 
 
 # Dependencies
