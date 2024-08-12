@@ -25,7 +25,7 @@ proc add_path*( key_stack:var KeyStack, path:string, separator:string = "/" ) =
     key_stack.atoms.add( path_atom )
 
 proc add_file_path*( key_stack:var KeyStack, original_path:string ) =
-  let content_root = state.config.map["content_root"]
+  let content_root = state.config.map["content_directory"]
   var path = original_path
   let (_, _, extension) = splitFile(path)
   
