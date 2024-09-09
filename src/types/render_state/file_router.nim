@@ -36,10 +36,13 @@ proc calculate_render_state_items_for*(context: JsonNode, source_path: string): 
   # to "shop.products" and then render the template for each value in the
   # "shop.products" array/object.
   for token in context_path:
+    debug "Traversing context path: ", token
     local_context = local_context{token}
     if local_context == nil:
       warn "Skipping The path '", context_path.join("."), "' doesn't exist."
       return
+
+  debug "0"
 
   let
     template_render_state_item = init_render_state_item(
@@ -50,10 +53,13 @@ proc calculate_render_state_items_for*(context: JsonNode, source_path: string): 
       items = newJArray()
     )
 
+  debug "1"
+
   if key_match != (-1,0):
     # We have a key replacement template.
     # The filename part of the path will be replaced with the key/index for
     # each value in the array/object.
+    debug "2.1"
     return local_context.render_key_match( template_render_state_item )
 
   elif attribute_match != (-1,0):
@@ -63,6 +69,9 @@ proc calculate_render_state_items_for*(context: JsonNode, source_path: string): 
     let
       attribute_name = filename[attribute_match[0]+1 .. attribute_match[1]-1]
 
+    debug "2.2"
+    debug "Attribute match: ", attribute_name
+    debug "local_context: ", local_context[0]
     return local_context.render_attribute_match( attribute_name, template_render_state_item )
 
   elif array_match != (-1,0):
@@ -72,11 +81,13 @@ proc calculate_render_state_items_for*(context: JsonNode, source_path: string): 
     let
       attribute_name = filename[array_match[0]+1 .. array_match[1]-1]
 
+    debug "2.3"
     return local_context.render_array_match( attribute_name, template_render_state_item )
 
   else:
     # No key replacement template, no attribute match, no array match.
     # This is a single page template, just replace the extension and render.
+    debug "2.4"
     result.add( template_render_state_item.init_render_state_item(
       output_path = output_path / filename.strip() & ".html",
       item = template_render_state_item.item,
