@@ -10,8 +10,9 @@ import indifferent_iterator
 
 proc getNestedValue(node: JsonNode, path: string): JsonNode =
   var current = node
+
   for key in path.split("."):
-    if current.kind != JObject:
+    if isNil(current) or current.kind != JObject:
       return nil
     current = current.getOrDefault(key)
   return current
@@ -20,7 +21,9 @@ proc render_attribute_match*( context: JsonNode, attribute_name: string, partial
   result = @[]
 
   for v in context.each():
+    debug "a"
     if v.kind == JObject:
+      debug "b"
       let nestedValue = getNestedValue(v, attribute_name)
 
       if nestedValue != nil:
