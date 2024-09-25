@@ -115,6 +115,22 @@ build if they need some specialized executable for example. At your own risk of
 cause, but at least there is an easy escape hatch for the places where you need
 one.
 
+## Installation
+
+### MacOS
+
+1. Place the binary in your path, for instance in `~/bin`.
+2. Install fswatch. If you are using brew: `brew install fswatch`
+3. Install pcre. With brew: `brew install pcre`
+
+If Accelerate can't find fswatch (`could not load: libfswatch.dylib`),
+start by verifying that fswatch is actually installed, then find the path
+to the library, for instance by using `brew info fswatch`. Then set that path as following to your `.zshrc`
+or similar (where `/usr/local/lib` is the actual path to the library):
+```sh
+export DYLD_LIBRARY_PATH="/usr/local/lib"
+```
+
 ## Development
 
 Clone then run using `nimble -d:debug -d:nimDebugDlOpen -p:src --threads:on
