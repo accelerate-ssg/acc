@@ -1,2 +1,14 @@
 node_modules
 deps
+
+# Ignore everything in the subtree
+src/**
+
+# Allow directories to be tracked (so we can recurse into them)
+!src/**/
+
+# Allow specific file extensions
+!src/*.nim
+
+# If you need to allow files in subdirectories, repeat the rules
+!src/**/*.nim
