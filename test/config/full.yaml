@@ -17,76 +17,76 @@ directories:
   build: ".acc/build"
 
 workflows:
-- name: "build_and_deploy"
-  case:
-  - when: "production"
-    command: "echo $GIT_BRANCH"
-    matches: "$master|main^"
-    env:
-    - "DNS_NAME=helmaskin.se"
-    - "NAMESPACE=heimr"
-    workflows:
-    - "build"
-    - "containerise"
-    - "deploy"
-  - when: "development"
-    command: "echo $GIT_BRANCH"
-    matches: "$develop"
-    env:
-    - "DNS_NAME=helmaskin.accodeing.dev"
-    - "NAMESPACE=heimr-staging"
-    workflows:
-    - "build"
-    - "containerise"
-    - "deploy"
-  - when: "feature"
-    command: "echo $GIT_BRANCH"
-    matches: "feature/*"
-    env:
-    - "PATH_PREFIX=$(echo $GIT_BRANCH | cut -d'/' -f2)"
-    - "DNS_NAME=$PATH_PREFIX.helmaskin.accodeing.dev"
-    - "NAMESPACE=heimr-feature"
-    workflows:
-    - "build"
-    - "containerise"
-    - "deploy"
+  - name: "build_and_deploy"
+    case:
+      - when: "production"
+        env_var: "GIT_BRANCH"
+        matches: "$master|main^"
+        env:
+          - "DNS_NAME=helmaskin.se"
+          - "NAMESPACE=heimr"
+        workflows:
+          - "build"
+          - "containerise"
+          - "deploy"
+      - when: "development"
+        command: "echo $GIT_BRANCH"
+        matches: "$develop"
+        env:
+          - "DNS_NAME=helmaskin.accodeing.dev"
+          - "NAMESPACE=heimr-staging"
+        workflows:
+          - "build"
+          - "containerise"
+          - "deploy"
+      - when: "feature"
+        command: "echo $GIT_BRANCH"
+        matches: "feature/*"
+        env:
+          - "PATH_PREFIX=$(echo $GIT_BRANCH | cut -d'/' -f2)"
+          - "DNS_NAME=$PATH_PREFIX.helmaskin.accodeing.dev"
+          - "NAMESPACE=heimr-feature"
+        workflows:
+          - "build"
+          - "containerise"
+          - "deploy"
 
-- name: "sync_content"
-  steps:
-  - comment: "Download CSV from Google sheets"
-    command: "products_download.rb"
-    arguments:
-    - "$env.GOOGLE_SHEETS_API_KEY"
-    - "$env.GOOGLE_SHEETS_SPREADSHEET_ID"
-    - "/tmp/google_sheets" # Destination directory
+  - name: "sync_content"
+    steps:
+      - comment: "Download CSV from Google sheets"
+        command: "products_download.rb"
+        arguments:
+          - "$env.GOOGLE_SHEETS_API_KEY"
+          - "$env.GOOGLE_SHEETS_SPREADSHEET_ID"
+          - "/tmp/google_sheets" # Destination directory
 
-- name: "preprocess"
-  steps:
-  - comment: "Transform the CSV files into YAML"
-    command: "products_preprocess.rb"
-    arguments:
-    - "/tmp/google_sheets" # Source directory
-    - "content/produkter" # Destination directory
+  - name: "preprocess"
+    steps:
+      - comment: "Transform the CSV files into YAML"
+        command: "products_preprocess.rb"
+        arguments:
+          - "/tmp/google_sheets" # Source directory
+          - "content/produkter" # Destination directory
 
-- name: "build"
-  steps:
-  - comment: "Copy static assets to build directory" 
-    script: "@copy"
-    glob: "**/*.{jpg,jpeg,png,gif,svg,webp,ico,woff,woff2,ttf,eot,otf,mp4,webm,ogg,mp3,wav,flac,aac}"
-  - comment: "Load YAML files from content directory into context"
-    script: "@yaml"
-    glob: "**/*.{yml,yaml}"
-  - comment: "Process any markdown blocks in context into HTML"
-    script: "@markdown"
-    key_suffixes:
-    - "_markdown"
-  - comment: ""
-    script: "@mustache"
-    partial_directories:
-    - "src/partials"
-    glob: "**/*.mustache"
+  - name: "build"
+    steps:
+      - comment: "Copy static assets to build directory"
+        script: "@copy"
+        glob: "**/*.{jpg,jpeg,png,gif,svg,webp,ico,woff,woff2,ttf,eot,otf,mp4,webm,ogg,mp3,wav,flac,aac}"
+      - comment: "Load YAML files fro<m content directory into context"
+        script: "@yaml"
+        glob: "**/*.{yml,yaml}"
+      - comment: "Process any markdown blocks in context into HTML"
+        script: "@markdown"
+        key_suffixes:
+          - "_markdown"
+      - comment: ""
+        script: "@mustache"
+        partial_directories:
+          - "src/partials"
+        glob: "**/*.mustache"
 
-- name: "deploy"
-  steps:
-  - comment: "Deploy to GKE"
-    command: "{ for i in kubernets/*.yaml ; do echo '---' ; envsubst < $i ; done; } | kubectl apply -f -"
+  - name: "deploy"
+    steps:
+      - comment: "Deploy to GKE"
+        command: "{ for i in kubernets/*.yaml ; do echo '---' ; envsubst < $i ; done; } | kubectl apply -f -"
