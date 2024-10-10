@@ -42,7 +42,8 @@ proc resolveAtoms(context: JsonNode, atoms: seq[string], lastArrayItem: JsonNode
             path_atom: toString(item),
             context: lastArrayItem,
             lastArrayItem: lastArrayItem,
-            items: @[lastArrayItem]
+            items: @[lastArrayItem],
+            item: item
           )
         )
     of JObject:
