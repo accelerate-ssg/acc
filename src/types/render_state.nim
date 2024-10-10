@@ -1,5 +1,4 @@
 import json
-import sequtils
 
 from types/config import Path
 
