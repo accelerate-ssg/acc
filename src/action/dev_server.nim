@@ -1,4 +1,4 @@
-import asynchttpserver, asyncdispatch, os, strutils, ws, atomics, random, sequtils, locks, json, terminal
+import asynchttpserver, asyncdispatch, os, strutils, ws, atomics, random, sequtils, locks, json, terminal, uri
 
 import global_state
 import logger
@@ -135,36 +135,39 @@ proc process_request( request: Request, root_dir: string, source_root: string ) 
   warn "Got request"
 
   var
-    path: string
     status = Http200
     content = ""
     headers = {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store"
     }.newHttpHeaders()
-    existing_file = fileExists(path)
+    found_path: string
+    existing_file: bool
+
 
   let
     about_context = request.url.path == "/about:context"
+    decoded_request_uri_path = decodeUrl(request.url.path)
     paths = [
-      root_dir / request.url.path,
+      root_dir / decoded_request_uri_path,
       # If the request is for the root, try to serve index.html
-      root_dir / request.url.path / "index.html", 
+      root_dir / decoded_request_uri_path / "index.html", 
       # Check if it is a file withouth an extension, if so, try to serve it as
       # an HTML file
-      root_dir / request.url.path & ".html",
+      root_dir / decoded_request_uri_path & ".html",
       # If it still doesn't exist try and load it from the build root
       # Chanses are it's a resource we haven't copied over to the build directory
       # TODO: Add a way to copy over resources from the source directory to the
       # build directory
-      source_root / request.url.path
+      source_root / decoded_request_uri_path
+
     ]
 
-  for local_path in paths:
-    path = local_path
+  for path in paths:
     existing_file = fileExists(path)
     if existing_file:
       warn "Found: ", path
+      found_path = path
       break;
     else:
       warn "Didn't find: ", path
@@ -174,10 +177,10 @@ proc process_request( request: Request, root_dir: string, source_root: string ) 
     content = context_as_json()
   elif existing_file:
     let
-      ext = split_file(path.to_lower()).ext
+      ext = split_file(found_path.to_lower()).ext
       mime_type = mime_types.get_or_default(ext)
     
-    content = read_file(path)
+    content = read_file(found_path)
     headers["content-type"] = mime_type & "; charset=utf-8"
     
     if ext == ".html" or ext == ".htm":
