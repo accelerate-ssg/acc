@@ -16,7 +16,7 @@ iterator each*( paths: openArray[Path] ): tuple[ absolute: string, relative: str
 
   for path in paths:
     let
-      absolute_path = path.string
+      absolute_path = path
       relative_path = relativePath( absolute_path, root )
       matches = if match_relative: relative_path.matches( pattern ) else: absolute_path.matches( pattern )
 

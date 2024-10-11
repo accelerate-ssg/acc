@@ -1,4 +1,5 @@
-import std/[os]
+import os, json
+
 import global_state
 import types/plugin
 import logger
@@ -6,19 +7,14 @@ import glob
 import mustache
 import tables
 import strutils
-import sets
 
 import types/config/path_helpers
-import action/internal_functions/utils
 
 proc search_dirs(plugin: Plugin): seq[string] =
   result = @["./", state.config.source_directory]
   if plugin.config.has_key("search_dirs"):
     for path in plugin.config["search_dirs"].split(','):
       result.add(path.strip)
-  for path in result:
-    let
-      file_path = path / "partials/main_nav.mustache" 
 
 proc glob(plugin: Plugin): Glob =
   result = glob("*.mustache")
@@ -73,6 +69,5 @@ proc run*(plugin: Plugin) =
           return "0"
       context["item"] = render_item.item
       context["items"] = render_item.items
-
 
       write_file(destination_path, context.render(absolute_path))
