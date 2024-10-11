@@ -127,7 +127,7 @@ proc parse*(context: JsonNode, path: string): seq[(string, JsonNode, JsonNode)] 
   ## Parses the path template and generates a table mapping paths to contexts.
   let segments = splitPath(path)
   var resultsTable = initTable[string, (JsonNode, seq[JsonNode])]()
-  processSegments(context, segments, "", nil, @[], nil, resultsTable)
+  processSegments(context, segments, "", newJNull(), @[], nil, resultsTable)
   for (path, value) in resultsTable.pairs:
     let (item, items) = value
     result.add((path, item, %items))
