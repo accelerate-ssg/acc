@@ -23,6 +23,7 @@ jobs:
         run: |
           brew update
           brew install fswatch
+
       - name: Install Nim dependencies
         run: |
           nimble install -y
@@ -35,7 +36,7 @@ jobs:
 
       - name: Build executable
         run: |
-          nim c -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on -d:release src/acc.nim
+          nimble build -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on -d:release
 
       - name: Prepare release
         id: prepare_release
