@@ -87,4 +87,4 @@ jobs:
           automatic_release_tag: "${{ steps.prepare_release.outputs.TAG_NAME }}"
           title: "${{ steps.prepare_release.outputs.RELEASE_NAME }}"
           files: |
-            ./src/acc
+            ./acc
