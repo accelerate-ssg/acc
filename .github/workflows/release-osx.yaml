@@ -9,7 +9,8 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest-xlarge
+    # See https://github.com/actions/runner-images?tab=readme-ov-file#available-images for available runners
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
 
