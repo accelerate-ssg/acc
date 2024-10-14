@@ -14,6 +14,30 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Cache Nim
+        uses: actions/cache@v2
+        with:
+          path: ~/.choosenim
+          key: ${{ runner.os }}-nim-${{ hashFiles('**/nim.cfg') }}
+          restore-keys: |
+            ${{ runner.os }}-nim-
+
+      - name: Cache Nimble
+        uses: actions/cache@v2
+        with:
+          path: ~/.nimble
+          key: ${{ runner.os }}-nimble-${{ hashFiles('**/*.nimble') }}
+          restore-keys: |
+            ${{ runner.os }}-nimble-
+
+      - name: Cache Homebrew
+        uses: actions/cache@v2
+        with:
+          path: ~/Library/Caches/Homebrew
+          key: ${{ runner.os }}-homebrew-${{ hashFiles('**/Brewfile') }}
+          restore-keys: |
+            ${{ runner.os }}-homebrew-
+
       - name: Set up Nim
         uses: jiro4989/setup-nim-action@v1
         with:
