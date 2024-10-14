@@ -56,22 +56,11 @@ jobs:
           fi
 
       - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: "marvinpinto/action-automatic-releases@latest"
         with:
-          tag_name: ${{ steps.prepare_release.outputs.TAG_NAME }}
-          release_name: ${{ steps.prepare_release.outputs.RELEASE_NAME }}
-          draft: false
-          prerelease: ${{ steps.prepare_release.outputs.IS_PRERELEASE }}
-
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./src/acc
-          asset_name: ${{ steps.prepare_release.outputs.ASSET_NAME }}
-          asset_content_type: application/octet-stream
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: "${{ env.IS_PRERELEASE }}"
+          automatic_release_tag: "${{ env.TAG_NAME }}"
+          title: "${{ env.RELEASE_NAME }}"
+          files: |
+            ./scr/acc
