@@ -9,19 +9,22 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-latest-xlarge
     steps:
       - uses: actions/checkout@v2
 
       - name: Set up Nim
         uses: jiro4989/setup-nim-action@v1
         with:
-          nim-version: "stable"
+          nim-version: "2.0.6"
 
       - name: Install libfswatch
         run: |
           brew update
           brew install fswatch
+      - name: Install Nim dependencies
+        run: |
+          nimble install -y
 
       - name: Read version from nimble file
         id: get_version
