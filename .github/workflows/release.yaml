@@ -1,0 +1,161 @@
+name: Build and Release Nim Executables
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+    branches:
+      - development
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, macos-13, windows-latest]
+        include:
+          - os: ubuntu-latest
+            artifact_name: acc-linux
+          - os: macos-latest
+            artifact_name: acc-osx-arm64
+          - os: macos-13
+            artifact_name: acc-osx-x86
+          - os: windows-latest
+            artifact_name: acc-windows.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Cache Nim
+        uses: actions/cache@v2
+        with:
+          path: ~/.choosenim
+          key: ${{ runner.os }}-${{ matrix.os }}-nim-${{ hashFiles('**/nim.cfg') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.os }}-nim-
+
+      - name: Cache Nimble
+        uses: actions/cache@v2
+        with:
+          path: ~/.nimble
+          key: ${{ runner.os }}-${{ matrix.os }}-nimble-${{ hashFiles('**/*.nimble') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.os }}-nimble-
+
+      - name: Cache Homebrew (macOS)
+        if: startsWith(matrix.os, 'macos')
+        uses: actions/cache@v2
+        with:
+          path: ~/Library/Caches/Homebrew
+          key: ${{ runner.os }}-${{ matrix.os }}-homebrew-${{ hashFiles('.github/Brewfile') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.os }}-homebrew-
+
+      - name: Cache apt packages (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/cache@v2
+        with:
+          path: ~/.apt-cache
+          key: ${{ runner.os }}-apt-${{ hashFiles('.github/apt-packages') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-
+
+      - name: Cache Chocolatey packages (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v2
+        with:
+          path: C:\Users\runneradmin\AppData\Local\Temp\chocolatey
+          key: ${{ runner.os }}-chocolatey-${{ hashFiles('.github/packages.config') }}
+          restore-keys: |
+            ${{ runner.os }}-chocolatey-
+
+      - name: Set up Nim
+        uses: jiro4989/setup-nim-action@v1
+        with:
+          nim-version: "2.0.6"
+
+      - name: Install dependencies (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          brew update
+          brew bundle --file .github/Brewfile
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo xargs apt-get install -y < .github/apt-packages
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install .github/packages.config
+
+      - name: Install Nim dependencies
+        run: nimble install -y
+
+      - name: Build executable (non-macOS)
+        if: "!startsWith(matrix.os, 'macos')"
+        run: |
+          nimble build -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on -d:release
+
+      - name: Build executable (macOS ARM64)
+        if: matrix.os == 'macos-latest'
+        run: |
+          nimble build -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:arm64
+
+      - name: Build executable (macOS x86)
+        if: matrix.os == 'macos-13'
+        run: |
+          nimble build -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:amd64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ./acc${{ runner.os == 'Windows' && '.exe' || '' }}
+
+  create-release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Read version from nimble file
+        id: get_version
+        run: |
+          VERSION=$(grep 'version =' acc.nimble | awk -F '"' '{print $2}')
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Prepare release
+        id: prepare_release
+        run: |
+          if [[ ${{ github.ref }} == refs/tags/* ]]; then
+            echo "IS_RELEASE=true" >> $GITHUB_OUTPUT
+            echo "TAG_NAME=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "RELEASE_NAME=Release ${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+          else
+            echo "IS_RELEASE=false" >> $GITHUB_OUTPUT
+            echo "TAG_NAME=v${{ steps.get_version.outputs.VERSION }}-dev" >> $GITHUB_OUTPUT
+            echo "RELEASE_NAME=Development build v${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_OUTPUT
+            echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v2
+
+      - name: Create Release
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: "${{ steps.prepare_release.outputs.IS_PRERELEASE }}"
+          automatic_release_tag: "${{ steps.prepare_release.outputs.TAG_NAME }}"
+          title: "${{ steps.prepare_release.outputs.RELEASE_NAME }}"
+          files: |
+            ./acc-linux/acc
+            ./acc-osx-arm64/acc
+            ./acc-osx-x86/acc
+            ./acc-windows.exe/acc.exe
