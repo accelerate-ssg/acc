@@ -111,7 +111,7 @@ jobs:
           nimble build -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:amd64
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: ./acc${{ runner.os == 'Windows' && '.exe' || '' }}
@@ -145,7 +145,7 @@ jobs:
           fi
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
 
       - name: Create Release
         uses: "marvinpinto/action-automatic-releases@latest"
