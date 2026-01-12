@@ -54,7 +54,7 @@ proc resolveAtoms(context: JsonNode, atoms: seq[string], lastArrayItem: JsonNode
             path_atom: key,
             context: value,
             lastArrayItem: lastArrayItem,
-            item: lastArrayItem
+            item: value
           )
         )
     else:
