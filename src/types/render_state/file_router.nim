@@ -100,3 +100,48 @@ suite "file based routing tests":
         "products/no_groups.html",
       ]
     check actual == expected
+
+  test "static template gets item from matching context key":
+    let ctx = %* { "about": { "name": "About Us" } }
+    let results = ctx.calculate_render_state_items_for("about.mustache")
+    check results.len == 1
+    check results[0].output_path == "about.html"
+    check results[0].item{"name"}.getStr == "About Us"
+
+  test "static template with no matching context key has null item":
+    let ctx = %* { "other": { "name": "Other" } }
+    let results = ctx.calculate_render_state_items_for("about.mustache")
+    check results.len == 1
+    check results[0].item.kind == JNull
+
+  test "nested static template looks up base name in context":
+    let ctx = %* { "about": { "name": "About Us" } }
+    let results = ctx.calculate_render_state_items_for("pages/about.mustache")
+    check results.len == 1
+    check results[0].output_path == "pages/about.html"
+    check results[0].item{"name"}.getStr == "About Us"
+
+  test "dynamic template resolves paths correctly":
+    let ctx = %* { "products": { "widget": { "name": "Widget" } } }
+    let results = ctx.calculate_render_state_items_for("products/{products}.mustache")
+    check results.len == 1
+    check results[0].output_path == "products/widget.html"
+
+  test "deeply nested path looks up base name in context":
+    let ctx = %* { "about": { "name": "About Us" } }
+    let results = ctx.calculate_render_state_items_for("a/b/c/about.mustache")
+    check results.len == 1
+    check results[0].output_path == "a/b/c/about.html"
+    check results[0].item{"name"}.getStr == "About Us"
+
+  test "static template with scalar context value":
+    let ctx = %* { "count": 42 }
+    let results = ctx.calculate_render_state_items_for("count.mustache")
+    check results.len == 1
+    check results[0].item.getInt == 42
+
+  test "empty context does not crash":
+    let ctx = %* {}
+    let results = ctx.calculate_render_state_items_for("about.mustache")
+    check results.len == 1
+    check results[0].item.kind == JNull

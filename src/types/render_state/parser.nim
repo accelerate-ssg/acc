@@ -1,5 +1,5 @@
 import json
-import strutils, sequtils, re
+import strutils, sequtils, re, os
 import tables, sets
 import logging
 
@@ -98,6 +98,16 @@ proc resolveAtoms(context: JsonNode, atoms: seq[string], lastArrayItem: JsonNode
       warn "Unsupported context kind: ", $context.kind
   return result
 
+proc item_from_template_name(item: JsonNode, context: JsonNode, path: string): JsonNode =
+  ## For static templates, look up the page name in context to populate item.
+  let itemNotSet = item.isNil or item.kind == JNull
+  let contextIsObject = not context.isNil and context.kind == JObject
+  if itemNotSet and contextIsObject:
+    let (_, name, _) = path.splitFile
+    if context.hasKey(name):
+      return context[name]
+  return item
+
 proc processSegments(context: JsonNode, segments: seq[string], currentPath: string, item: JsonNode, items: seq[JsonNode], lastArrayItem: JsonNode, resultsTable: var Table[string, (JsonNode, seq[JsonNode])]) =
   ## Processes the segments of the path template recursively, accumulating results into resultsTable.
   if segments.len == 0:
@@ -106,7 +116,7 @@ proc processSegments(context: JsonNode, segments: seq[string], currentPath: stri
       let (current_item, current_items) = resultsTable[currentPath]
       resultsTable[currentPath] = (current_item, current_items & items)
     else:
-      resultsTable[currentPath] = (item, items)
+      resultsTable[currentPath] = (item_from_template_name(item, context, currentPath), items)
   else:
     let segment = segments[0]
     let restSegments = segments[1..^1]
