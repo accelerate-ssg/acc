@@ -10,3 +10,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Static templates now correctly populate `item` from matching context key. For example, `about.mustache` will have `item` set to the value of `about` in the context, allowing `{{item.name}}` to work as expected. This restores behavior that was broken in 0.1.0.
+- Dynamic templates with object-based collections now correctly populate `item`. For example, `products/{products}.mustache` with context `{ "products": { "widget": { "name": "Widget" } } }` will have `item` set to the product object.
