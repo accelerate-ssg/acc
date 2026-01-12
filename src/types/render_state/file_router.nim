@@ -121,11 +121,19 @@ suite "file based routing tests":
     check results[0].output_path == "pages/about.html"
     check results[0].item{"name"}.getStr == "About Us"
 
-  test "dynamic template resolves paths correctly":
+  test "dynamic template with object-based collection populates item":
     let ctx = %* { "products": { "widget": { "name": "Widget" } } }
     let results = ctx.calculate_render_state_items_for("products/{products}.mustache")
     check results.len == 1
     check results[0].output_path == "products/widget.html"
+    check results[0].item{"name"}.getStr == "Widget"
+
+  test "dynamic template with array-based collection populates item":
+    let ctx = %* { "products": [ { "slug": "widget", "name": "Widget" } ] }
+    let results = ctx.calculate_render_state_items_for("products/{products.slug}.mustache")
+    check results.len == 1
+    check results[0].output_path == "products/widget.html"
+    check results[0].item{"name"}.getStr == "Widget"
 
   test "deeply nested path looks up base name in context":
     let ctx = %* { "about": { "name": "About Us" } }
