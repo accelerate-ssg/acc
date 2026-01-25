@@ -2,11 +2,9 @@ import os
 import glob
 import strutils
 import sequtils
-import times
 import sets
 import tables
 import unittest
-import sugar
 
 import logger
 from types/config import Config, Path

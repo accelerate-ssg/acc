@@ -1,4 +1,4 @@
-import json, strutils, sequtils, re, os, unittest, sugar
+import json, strutils, sequtils, os, unittest, sugar
 
 import logger
 import types/render_state

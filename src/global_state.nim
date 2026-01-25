@@ -8,9 +8,7 @@ import "$nim"/compiler / [renderer]
 
 import logger
 import types/state as state_type
-import types/config
 import types/config/init
-import types/render_state/calculate
 import types/plugin
 
 export State

@@ -1,16 +1,10 @@
 import os
 import strutils
 import times
-import tables
-import json
-
-import sequtils
-import sugar
 
 import logger
 import global_state
 import script/run
-import types/pretty_print
 import types/config/path_helpers
 import types/render_state/calculate
 

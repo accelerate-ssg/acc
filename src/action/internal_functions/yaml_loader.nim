@@ -1,4 +1,4 @@
-import std/[json, tables, strutils, sets, os]
+import std/[json, tables, strutils, os]
 import yaml/[tojson, native, parser]
 import logger
 import glob
@@ -7,7 +7,7 @@ import global_state
 import types/plugin
 import types/config
 import types/config/path_helpers
-import action/internal_functions/[utils, config, key_stack]
+import action/internal_functions/[config, key_stack]
 
 var stack = newKeyStack()
 

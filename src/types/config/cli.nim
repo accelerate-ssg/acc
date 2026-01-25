@@ -1,6 +1,5 @@
 import system
 from os import getAppDir, fileExists, dirExists, expandFilename, absolutePath, normalizedPath, `/`
-import strformat
 import strutils
 import docopt
 
