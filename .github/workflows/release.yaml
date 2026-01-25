@@ -25,10 +25,10 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Cache Nim
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: ~/.choosenim
           key: ${{ runner.os }}-${{ matrix.os }}-nim-${{ hashFiles('**/nim.cfg') }}
@@ -36,7 +36,7 @@ jobs:
             ${{ runner.os }}-${{ matrix.os }}-nim-
 
       - name: Cache Nimble
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: ~/.nimble
           key: ${{ runner.os }}-${{ matrix.os }}-nimble-${{ hashFiles('**/*.nimble') }}
@@ -45,7 +45,7 @@ jobs:
 
       - name: Cache Homebrew (macOS)
         if: startsWith(matrix.os, 'macos')
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: ~/Library/Caches/Homebrew
           key: ${{ runner.os }}-${{ matrix.os }}-homebrew-${{ hashFiles('.github/Brewfile') }}
@@ -54,7 +54,7 @@ jobs:
 
       - name: Cache apt packages (Linux)
         if: runner.os == 'Linux'
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: ~/.apt-cache
           key: ${{ runner.os }}-apt-${{ hashFiles('.github/apt-packages') }}
@@ -63,7 +63,7 @@ jobs:
 
       - name: Cache Chocolatey packages (Windows)
         if: runner.os == 'Windows'
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: C:\Users\runneradmin\AppData\Local\Temp\chocolatey
           key: ${{ runner.os }}-chocolatey-${{ hashFiles('.github/packages.config') }}
@@ -121,7 +121,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Read version from nimble file
         id: get_version
