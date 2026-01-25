@@ -97,7 +97,7 @@ jobs:
       - name: Build executable (Windows)
         if: runner.os == 'Windows'
         run: |
-          nimble build -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on -d:release
+          nimble build -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on -d:release --passC:-Wno-incompatible-pointer-types
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
