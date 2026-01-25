@@ -67,7 +67,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential autoconf automake libtool gettext libpcre3-dev
+          sudo apt-get install -y build-essential autoconf automake libtool gettext autopoint libpcre3-dev
           git clone --depth 1 https://github.com/emcrisostomo/fswatch.git /tmp/fswatch
           cd /tmp/fswatch
           ./autogen.sh
