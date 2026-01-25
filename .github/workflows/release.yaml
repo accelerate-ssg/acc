@@ -11,7 +11,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, macos-15-intel]
+        os: [ubuntu-latest, macos-latest, macos-15-intel, windows-latest]
         include:
           - os: ubuntu-latest
             artifact_name: acc-linux
@@ -19,6 +19,8 @@ jobs:
             artifact_name: acc-osx-arm64
           - os: macos-15-intel
             artifact_name: acc-osx-x86
+          - os: windows-latest
+            artifact_name: acc-windows.exe
 
     runs-on: ${{ matrix.os }}
 
@@ -50,15 +52,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ matrix.os }}-homebrew-
 
-      - name: Cache apt packages (Linux)
-        if: runner.os == 'Linux'
-        uses: actions/cache@v4
-        with:
-          path: ~/.apt-cache
-          key: ${{ runner.os }}-apt-${{ hashFiles('.github/apt-packages') }}
-          restore-keys: |
-            ${{ runner.os }}-apt-
-
       - name: Set up Nim
         uses: jiro4989/setup-nim-action@v1
         with:
@@ -74,7 +67,14 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo xargs apt-get install -y < .github/apt-packages
+          sudo apt-get install -y build-essential autoconf automake libtool gettext libpcre3-dev
+          git clone --depth 1 https://github.com/emcrisostomo/fswatch.git /tmp/fswatch
+          cd /tmp/fswatch
+          ./autogen.sh
+          ./configure
+          make
+          sudo make install
+          sudo ldconfig
 
       - name: Install Nim dependencies
         run: nimble install -y
@@ -94,11 +94,16 @@ jobs:
         run: |
           nimble build -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:amd64
 
+      - name: Build executable (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          nimble build -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on -d:release
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: ./acc
+          path: ./acc${{ runner.os == 'Windows' && '.exe' || '' }}
 
   create-release:
     needs: build
@@ -142,3 +147,4 @@ jobs:
             ./acc-linux/acc
             ./acc-osx-arm64/acc
             ./acc-osx-x86/acc
+            ./acc-windows.exe/acc.exe
