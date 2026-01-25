@@ -11,13 +11,13 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, macos-13, windows-latest]
+        os: [ubuntu-latest, macos-latest, macos-15-intel, windows-latest]
         include:
           - os: ubuntu-latest
             artifact_name: acc-linux
           - os: macos-latest
             artifact_name: acc-osx-arm64
-          - os: macos-13
+          - os: macos-15-intel
             artifact_name: acc-osx-x86
           - os: windows-latest
             artifact_name: acc-windows.exe
@@ -106,7 +106,7 @@ jobs:
           nimble build -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:arm64
 
       - name: Build executable (macOS x86)
-        if: matrix.os == 'macos-13'
+        if: matrix.os == 'macos-15-intel'
         run: |
           nimble build -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:amd64
 
