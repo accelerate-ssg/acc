@@ -76,8 +76,13 @@ jobs:
           sudo make install
           sudo ldconfig
 
-      - name: Install Nim dependencies
+      - name: Install Nim dependencies (non-Windows)
+        if: runner.os != 'Windows'
         run: nimble install -y
+
+      - name: Install Nim dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: nimble install -y --passC:-Wno-incompatible-pointer-types
 
       - name: Build executable (Linux)
         if: runner.os == 'Linux'
