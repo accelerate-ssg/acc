@@ -1,5 +1,6 @@
 import logger
 import global_state
+import action/run_workflow
 
 proc run*( state: State ) =
   let workflow_name = state.config.runWorkflow
@@ -8,5 +9,7 @@ proc run*( state: State ) =
     return
 
   notice "Running workflow: ", workflow_name
-  # TODO: implement workflow execution engine
-  warn "Workflow execution not yet implemented"
+  try:
+    runWorkflowByName(state, workflow_name)
+  except KeyError:
+    error "Workflow '", workflow_name, "' not found in config"
