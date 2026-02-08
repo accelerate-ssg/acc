@@ -1,10 +1,11 @@
 import std/[json, tables, strutils, sets, os]
-import yaml
+import yaml/[tojson, native, parser]
 import logger
 import glob
+
 import global_state
 import types/plugin
-
+import types/config
 import types/config/path_helpers
 import action/internal_functions/[utils, config, key_stack]
 
@@ -25,7 +26,7 @@ proc parse(absolute_path: string, relative_path: string) =
       for jsonNode in json_nodes_seq: # Add the elements from the sequence to the array
         context_node.add(jsonNode)
 
-    state.context[$stack] = context_node # Store the JsonNode in the state
+    state.context{stack.atoms} = context_node # Store the JsonNode in the state
   except IOError:
     fatal "Error reading file ", absolute_path
     raise
@@ -45,16 +46,14 @@ proc parse(absolute_path: string, relative_path: string) =
     stack.clear()
 
 proc run*(plugin: Plugin) =
-  let glob = plugin.glob("content/**/*.yaml")
+  let glob = plugin.glob( DEFAULT_CONTENT_DIRECTORY / "**/*.{yml,yaml}")
   let context_path_prefix = plugin.context_path_prefix("")
   stack.add_dotted_path( context_path_prefix )
 
   warn "plugin.config: ", plugin.config
   warn "plugin: ", plugin
 
-  for absolute_path in state.config.files:
-    let
-      relative_path = absolute_path.relative_path(state.config.workspace_directory)
-    if relative_path.matches(glob):
-      notice "Parsing: ", absolute_path
-      parse( absolute_path, relative_path )
+  for file in walk_dir_rec( state.config.content_directory, relative = true ):
+    if file.matches(glob):
+      notice "Parsing: ", file
+      parse( state.config.content_directory / file, file )

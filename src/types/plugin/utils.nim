@@ -11,7 +11,7 @@ let meta_keys = @["name","version","author","description","license"]
 proc empty( table: Table[string, string] ):bool =
   not meta_keys.any( key => table.has_key( key ))
 
-proc get_plugin_meta*( path: string ):Table[string, string] =
+proc get_script_meta*( path: string ):Table[string, string] =
   var line: string
   var matches: array[2, string]
   var meta: Table[string, string]
@@ -32,6 +32,6 @@ proc get_plugin_meta*( path: string ):Table[string, string] =
 
   return meta
 
-proc get_plugin_name*( path: string, default: string = "" ):string =
-  let meta = get_plugin_meta( path )
+proc get_script_name*( path: string, default: string = "" ):string =
+  let meta = get_script_meta( path )
   return meta.get_or_default( "name", default )

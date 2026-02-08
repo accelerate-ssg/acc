@@ -10,7 +10,7 @@ import types/config/path_helpers
 
 iterator each*( paths: openArray[Path] ): tuple[ absolute: string, relative: string ] =
   let
-    root = state.config.workspace_directory()
+    root = state.config.root_directory()
     match_relative = state.current_plugin.config.get_or_default( "match_relative", "true" ) == "true"
     pattern = glob( state.current_plugin.config.get_or_default( "glob", "**/*" ))
 

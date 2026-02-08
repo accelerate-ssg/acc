@@ -1,2 +1,29 @@
-node_modules
+nimbledeps
 nimpledeps
+node_modules
+deps
+
+# Build artifacts
+accelerate.json
+atlas.workspace
+*.out
+
+# Compiled binaries in src/
+src/acc
+src/fswatch/fsevent
+src/fswatch/kqueue
+src/modules/script_runner/main
+src/types/render_state/file_list
+src/types/render_state/file_router
+
+# Scratch/test files
+test_script.js
+
+# Ignore non-source files in src/ by default
+src/**
+!src/**/
+!src/**/*.nim
+!src/**/*.cfg
+!src/**/*.txt
+!src/**/*.html
+!src/**/*.js

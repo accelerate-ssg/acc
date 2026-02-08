@@ -1,7 +1,8 @@
 import std / os
-import yaml, streams
+import yaml/[data,parser,stream]
 import tables
 import strutils
+import streams
 
 import logger
 import types/config
@@ -82,7 +83,7 @@ proc parse_string_string_map( msg: string = "" ): Table[ string, string ] =
     result[ name ] = value
     event = events.next
 
-proc parse_plugin_config(): Plugin =
+proc parse_script_config(): Plugin =
   var
     event: Event
   result = init_plugin()
@@ -124,7 +125,7 @@ proc parse_build_section( config: var Config ) =
 
   while event.kind != yamlEndSeq:
     if event.kind == yamlStartMap:
-      plugins.add parse_plugin_config()
+      plugins.add parse_script_config()
     event = events.next
 
   config.plugins = order( plugins )

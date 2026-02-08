@@ -4,6 +4,7 @@ include config/types
 include config/helpers
 include config/loaders
 include config/io
+include config/cli
 
 # Example usage
 when isMainModule and not defined(release):

@@ -61,7 +61,7 @@ proc ensure_no_missing_before_dependencies( nodes: seq[ RawNode ]) =
       raise newException(DependencyError, "Plugin(s) " & $list & " depends on \"before\" " & $dep & " but that plugin is not configured")
 
 # Helper proc to handle duplicate plugin configurations
-proc handle_duplicate_plugin_configurations(raw_nodes: seq[RawNode], unsorted: var seq[Node]) =
+proc handle_duplicate_script_configurations(raw_nodes: seq[RawNode], unsorted: var seq[Node]) =
   for index, raw_node in raw_nodes:
     let new_node = Node(self: raw_node.self, after: raw_node.after)
     let index = unsorted.find(new_node)
@@ -107,7 +107,7 @@ proc order*(plugins: seq[Plugin]): seq[Plugin] =
   raw_nodes.ensure_no_missing_after_dependencies()
   raw_nodes.ensure_no_missing_before_dependencies()
 
-  handle_duplicate_plugin_configurations(raw_nodes, unsorted)
+  handle_duplicate_script_configurations(raw_nodes, unsorted)
   convert_before_to_after_conditions(raw_nodes, unsorted)
 
   var done_index = 0

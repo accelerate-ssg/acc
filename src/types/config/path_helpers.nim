@@ -3,24 +3,30 @@ import tables
 
 import types/config
 
+proc current_directory*( config: Config ):string =
+  config.map["current_directory_path"]
+
+proc root_directory*( config: Config ):string =
+  config.map["root_directory"]
+
 proc source_directory*( config: Config ):string =
-  if config.map["source_directory"] != "":
-    return config.map["source_directory"]
-  else:
-    return config.map["current_directory_path"]
+  config.map["source_directory"]
 
 proc destination_directory*( config: Config ):string =
-  if config.map["destination_directory"] != "":
-    return config.map["destination_directory"]
-  else:
-    return config.source_directory() / DEFAULT_BUILD_DIRECTORY
+  config.map["destination_directory"]
 
 proc workspace_directory*( config: Config ):string =
-  if config.map["workspace_directory"] != "":
-    return config.map["workspace_directory"]
-  else:
-    return config.destination_directory() / DEFAULT_WORKSPACE_DIRECTORY
+  config.map["workspace_directory"]
 
+proc build_directory*( config: Config ):string =
+  config.map["build_directory"]
+
+proc script_directory*( config: Config ):string =
+  config.map["script_directory"]
+
+proc content_directory*( config: Config ):string =
+  config.map["content_directory"]
+  
 proc global_config_path*( config: Config ):string =
   return config.map["global_config_path"]
 

@@ -4,10 +4,15 @@ import times
 import tables
 import json
 
+import sequtils
+import sugar
+
 import logger
 import global_state
 import script/run
 import types/pretty_print
+import types/config/path_helpers
+import types/render_state/calculate
 
 
 template with_debug( name: string, body: untyped) =
@@ -15,31 +20,52 @@ template with_debug( name: string, body: untyped) =
   echo "--{ ", name, " }---------------------------------------------------"
   echo ""
   let old_state_context = state.context.deepCopy()
-  let plugin_start_time = epoch_time()
+  let script_start_time = epoch_time()
 
   # Execute the provided code block
   body
 
   # Debug footer
-  info "finished in ", format_float( epoch_time() - plugin_start_time, format = ffDecimal, precision = 2), " seconds."
+  info "finished in ", format_float( epoch_time() - script_start_time, format = ffDecimal, precision = 2), " seconds."
   echo ""
   let state_context_diff = diff( state.context, old_state_context )
-  fatal "[CONTEXT CHANGES]", pretty(state_context_diff)
   echo ""
+
+
+
+proc copy_files( state: State ) =
+  let
+    build_directory = state.config.build_directory
+    source_directory = state.config.source_directory
+
+  # Copy all legal source files to the build directory.
+  for render_item in state.render_state:
+    let
+      source_path = source_directory / render_item.source_path
+      destination_path = build_directory / render_item.source_path
+
+    destination_path.parent_dir.create_dir
+
+    if not destination_path.file_exists() or source_path.file_newer(destination_path):
+      debug "Copying ", source_path, " to ", destination_path
+      copy_file( source_path, destination_path )
 
 
 
 proc run_plugins*( state: State ) =
-  var missing_scripts: seq[ string ] = @[]
+  let
+    script_directory = state.config.script_directory
+  var
+    missing_scripts: seq[ string ] = @[]
 
   # Loop through all the configured plugins and make sure we can actually find
   # the script file they use as their entrypoint
   for index, plugin in state.config.plugins:
-    if file_exists( state.config.map["source_directory"] / plugin.script ):
-      debug "Found source dir relative ", state.config.map["source_directory"] / plugin.script
-      state.config.plugins[ index ].script = state.config.map["source_directory"] / plugin.script
+    if file_exists( script_directory / plugin.script ):
+      debug "Found in plugin dir ", script_directory / plugin.script
+      state.config.plugins[ index ].script = script_directory / plugin.script
     elif file_exists( plugin.script ):
-      debug "Found exec relative ", plugin.script
+      debug "Found relative to execution dir ", plugin.script
     elif plugin.function != "":
       debug "Found function ", plugin.function
     else:
@@ -59,6 +85,8 @@ proc run_plugins*( state: State ) =
     #   state.current_plugin = plugin
     #   plugin.run()
     state.current_plugin = plugin
+    state.render_state = calculate_render_state( state.config, state.context )
+    copy_files( state )
     plugin.run()
     
   #echo "------------------------------------------------------------------"
