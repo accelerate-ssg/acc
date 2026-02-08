@@ -1,0 +1,82 @@
+manifest_version: v1
+name: "Helmaskin"
+domains:
+  - "helmaskin.se"
+  - "helmaskin.accodeing.dev"
+meta:
+  product: "heimr"
+  build_counter: 0
+
+directories:
+  src: "src"
+  destination: "build"
+  content: "content"
+  config: ".acc"
+  work: ".acc/work"
+  scripts: ".acc/scripts"
+  build: ".acc/build"
+
+workflows:
+  - name: "build_and_deploy"
+    env:
+      - "GOOGLE_SHEETS_API_KEY=${secrets.GOOGLE_SHEETS_API_KEY}"
+      - "GOOGLE_SHEETS_SPREADSHEET_ID=${secrets.GOOGLE_SHEETS_SPREADSHEET_ID}"
+    workflows:
+      - "build"
+      - "deploy"
+
+  - name: "deploy_production"
+    if: "$ENVIRONMENT == production"
+    env:
+      - "DNS_NAME=${domains[0]}"
+      - "NAMESPACE=${meta.product}"
+    workflows:
+      - "build_and_deploy"
+
+  - name: "deploy_development"
+    if: "$ENVIRONMENT == development"
+    env:
+      - "DNS_NAME=${domains[1]}"
+      - "NAMESPACE=${meta.product}-staging"
+    workflows:
+      - "build_and_deploy"
+
+  - name: "sync_content"
+    steps:
+      - comment: "Download CSV from Google sheets"
+        script: "products_download.js"
+        arguments:
+          - "$GOOGLE_SHEETS_API_KEY"
+          - "$GOOGLE_SHEETS_SPREADSHEET_ID"
+          - "/tmp/google_sheets"
+
+  - name: "preprocess"
+    steps:
+      - comment: "Transform the CSV files into YAML"
+        script: "products_preprocess.js"
+        arguments:
+          - "/tmp/google_sheets"
+          - "content/produkter"
+
+  - name: "build"
+    steps:
+      - comment: "Copy static assets to build directory"
+        module: "@copy"
+        glob: "**/*.{jpg,jpeg,png,gif,svg,webp,ico,woff,woff2,ttf,eot,otf,mp4,webm,ogg,mp3,wav,flac,aac}"
+      - comment: "Load YAML files from content directory into context"
+        module: "@yaml"
+        glob: "**/*.{yml,yaml}"
+      - comment: "Process any markdown blocks in context into HTML"
+        module: "@markdown"
+        key_suffixes:
+          - "_markdown"
+      - comment: "Render mustache templates"
+        module: "@mustache"
+        partial_directories:
+          - "src/partials"
+        glob: "**/*.mustache"
+
+  - name: "deploy"
+    steps:
+      - comment: "Deploy to GKE"
+        command: "{ for i in kubernets/*.yaml ; do echo '---' ; envsubst < $i ; done; } | kubectl apply -f -"
