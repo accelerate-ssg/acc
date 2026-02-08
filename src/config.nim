@@ -1,0 +1,10 @@
+import yaml/[parser, dom, stream, data, tojson], tables, options, json, re, strutils, sequtils
+
+include config/types
+include config/helpers
+include config/loaders
+include config/io
+
+# Example usage
+when isMainModule and not defined(release):
+  include ../test/config

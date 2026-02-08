@@ -1,21 +1,18 @@
-import tables
-
-import types/config
 import global_state
 import logger
-import action/[build,test,clean,run,dev_server]
-import types/pretty_print
+import config
+import action/[build,test,clean,run,dev_server,init]
 
 proc ctrl_c_handler() {.noconv.} =
   notice "Force quit."
-  warn "Incomplete artifacts might be left in the build directory ", state.config.map["destination_directory"], "."
   quit 0
 
 proc main() =
   setControlCHook( ctrl_c_handler )
   init_logger()
 
-  debug state.config.pretty()
+  # TODO: Parse CLI args and load config
+  # state.config = loadConfigFromCli()
 
   case state.config.action:
   of ActionDev: state.dev_server()
@@ -23,6 +20,7 @@ proc main() =
   of ActionTest: state.test()
   of ActionClean: state.clean()
   of ActionRun: state.run()
+  of ActionInit: state.init()
   of ActionNone: discard
 
   quit(0)

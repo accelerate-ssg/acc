@@ -3,5 +3,5 @@
 import global_state
 import logger
 
-proc test*( global_state: State ) =
+proc test*( state: State ) =
   debug "Running test"
