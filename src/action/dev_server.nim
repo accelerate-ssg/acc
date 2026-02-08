@@ -3,8 +3,9 @@ import asynchttpserver, asyncdispatch, os, strutils, ws, atomics, random, sequti
 import global_state
 import logger
 import build
+import fswatch
 
-import dev_server/[mime_types,fswatch]
+import dev_server/mime_types
 
 const
   reload_script = static_read "dev_server/force_reload.js"
@@ -157,30 +158,28 @@ proc handle_request( root_dir: string, source_root: string ): (proc( request: Re
       warn "[HTTP request]"
       await process_request(request, root_dir, source_root)
 
-proc file_change_callback(event: fsw_cevent, event_num: cuint)  =
-  let old_parsing_context = get_parsing_context()
-  enableTrueColors()
+proc file_change_callback(event: Event) {.gcsafe.} =
+  {.cast(gcsafe).}:
+    let old_parsing_context = get_parsing_context()
+    enableTrueColors()
 
-  try:
-    set_parsing_context("file_system_change_monitor {.thread.}")
-    if event.path == nil:
-      debug "Change detected, but path is null"
-      return
-    if build_running == true:
-      debug "Change detected, but a build is already running"
-      return
+    try:
+      set_parsing_context("file_system_change_monitor {.thread.}")
+      if build_running == true:
+        debug "Change detected, but a build is already running"
+        return
 
-    build_running = true
-    debug "Change detected: ", event.path
+      build_running = true
+      debug "Change detected: ", event.path
 
-    build( state )
-    reload_flag.store(true)
-    build_running = false
+      build( state )
+      reload_flag.store(true)
+      build_running = false
 
-  except CatchableError:
-    debug "Exception in file_change_callback"
-  finally:
-    set_parsing_context(old_parsing_context)
+    except CatchableError:
+      debug "Exception in file_change_callback"
+    finally:
+      set_parsing_context(old_parsing_context)
 
 proc dev_server*( state: State ) =
   var server = new_async_http_server()
@@ -203,7 +202,30 @@ proc dev_server*( state: State ) =
 
   build( state )
 
+  # Set up file watcher using native fswatch
+  var channel: Channel[Event]
+  channel.open()
+
+  let watches = @[
+    Watch(path: src_dir)
+  ]
+
+  var watcherConfig = newWatcherConfig(watches, file_change_callback, channel)
+
+  # Spawn the platform-specific file watcher thread
+  var watcherThread: Thread[ptr WatcherConfig]
+  createThread(watcherThread, watch, addr watcherConfig)
+
+  # Poll the channel for file change events and invoke the callback
+  proc pollFileChanges(channel: ptr Channel[Event], callback: WatcherCallback) {.async.} =
+    while true:
+      let (hasData, event) = channel[].tryRecv()
+      if hasData:
+        callback(event)
+      else:
+        await sleepAsync(50)
+
   waitFor all(
     server.serve(Port(port), handle_request(server_root_dir, source_root)),
-    watch( src_dir, file_change_callback )
+    pollFileChanges(watcherConfig.channel, file_change_callback)
   )

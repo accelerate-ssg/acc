@@ -3,12 +3,16 @@ const
   supportsMacOSX = defined(macosx)
   supportsLinux = defined(linux)
 
+template debugEcho(msg: string) =
+  when not defined(release):
+    echo msg
+
 proc supportsWindowsFileNotifyAPI(): bool {.compileTime.} =
   when supportsWindows:
-    echo "Windows File Notify API is supported (not on Windows)"
+    debugEcho "Windows File Notify API is supported"
     result = true
   else:
-    echo "Windows File Notify API is not supported"
+    debugEcho "Windows File Notify API is not supported"
     result = false
 
 proc supportsFSEvent(): bool {.compileTime.} =
@@ -18,12 +22,12 @@ proc supportsFSEvent(): bool {.compileTime.} =
       {.passC: "-x objective-c".}
       proc CFRunLoopRun() {.importc.}
     if fsEventSupported:
-      echo "FSEvent is supported"
+      debugEcho "FSEvent is supported"
     else:
-      echo "FSEvent is not supported"
+      debugEcho "FSEvent is not supported"
     result = fsEventSupported
   else:
-    echo "FSEvent is not supported (not on macOS)"
+    debugEcho "FSEvent is not supported (not on macOS)"
     result = false
 
 proc supportsKqueue(): bool {.compileTime.} =
@@ -34,12 +38,12 @@ proc supportsKqueue(): bool {.compileTime.} =
                   eventlist: pointer, nevents: cint, timeout: pointer): cint
                   {.importc, header: "<sys/event.h>".}
     if kqueueSupported:
-      echo "Kqueue is supported"
+      debugEcho "Kqueue is supported"
     else:
-      echo "Kqueue is not supported"
+      debugEcho "Kqueue is not supported"
     result = kqueueSupported
   else:
-    echo "Kqueue is not supported (not on macOS or BSD)"
+    debugEcho "Kqueue is not supported (not on macOS or BSD)"
     result = false
 
 proc supportsInotify(): bool {.compileTime.} =
@@ -48,30 +52,30 @@ proc supportsInotify(): bool {.compileTime.} =
       import posix
       proc inotify_init(): cint {.importc, header: "<sys/inotify.h>".}
     if inotifySupported:
-      echo "Inotify supported"
+      debugEcho "Inotify supported"
     else:
-      echo "Inotify not supported"
+      debugEcho "Inotify not supported"
     result = inotifySupported
   else:
-    echo "Inotify is not supported (not on Linux)"
+    debugEcho "Inotify is not supported (not on Linux)"
     result = false
 
 proc chooseFileWatcherStrategy(): string {.compileTime.} =
-  echo "Choosing file watcher strategy..."
+  debugEcho "Choosing file watcher strategy..."
   if supportsWindowsFileNotifyAPI():
-    echo "Selected: Windows File Notify API"
+    debugEcho "Selected: Windows File Notify API"
     return "WindowsFileNotifyAPI"
   elif supportsFSEvent():
-    echo "Selected: FSEvent"
+    debugEcho "Selected: FSEvent"
     return "FSEvent"
   elif supportsKqueue():
-    echo "Selected: Kqueue"
+    debugEcho "Selected: Kqueue"
     return "Kqueue"
   elif supportsInotify():
-    echo "Selected: Inotify"
+    debugEcho "Selected: Inotify"
     return "Inotify"
   else:
-    echo "No valid file watcher found for this platform"
+    debugEcho "No valid file watcher found for this platform"
     return "Unsupported"
 
 const FileWatcherStrategy* = chooseFileWatcherStrategy()

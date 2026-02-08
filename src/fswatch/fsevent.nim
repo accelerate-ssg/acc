@@ -2,8 +2,6 @@ import os, strutils, sequtils
 
 import glob
 
-import ./types
-
 {.passL: "-framework CoreServices -framework CoreFoundation".}
 
 type
@@ -64,9 +62,11 @@ proc CFArrayCreate(
   allocator: pointer, values: ptr pointer, numValues: csize_t, callbacks: pointer
 ): CFArrayRef {.importc.}
 
+{.emit: "extern const void* kCFRunLoopDefaultMode;".}
+var kCFRunLoopDefaultMode {.importc, nodecl.}: CFStringRef
+
 const
   kCFStringEncodingUTF8: cuint = 0x08000100
-  kCFRunLoopDefaultMode = "kCFRunLoopDefaultMode"
   kFSEventStreamCreateFlagNoDefer = 0x00000002
   kFSEventStreamCreateFlagFileEvents = 0x00000010
   kFSEventStreamEventIdSinceNow: FSEventStreamEventId = 0xFFFFFFFFFFFFFFFF'u64
@@ -78,7 +78,7 @@ const
 
 proc shouldWatch(path: string, watch: Watch): bool =
   let relativePath = path.relativePath(watch.path)
-  watch.including.anyIt(relativePath.matches(it)) and 
+  watch.including.anyIt(relativePath.matches(it)) and
   not watch.excluding.anyIt(relativePath.matches(it))
 
 proc eventCallback(
@@ -96,40 +96,31 @@ proc eventCallback(
 
   for i in 0 ..< numEvents:
     let path = $paths[i]
-    
+
     # Find matching watch for this path
     var matchingWatch: Watch
 
     for watch in ctx.config.watches:
-      echo "Checking watch: ", watch.path
       if path.startsWith(watch.path) and shouldWatch(path, watch):
         matchingWatch = watch
-        echo "Matching watch for path: ", path
         break
-      else:
-        echo "No matching watch for path: ", path
-    
+
     if matchingWatch.path == "":
       continue
 
-    let 
-      eventFlags = flags[i]
+    let
+      itemFlags = flags[i]
       interestingEvents = matchingWatch.kinds
-    var event = Event(path: path)
 
-    # Map FSEvent flags to our event types
-    if (eventFlags and kFSEventStreamEventFlagItemModified) != 0 and etModify in interestingEvents:
-      event.kind = etModify
-    elif (eventFlags and kFSEventStreamEventFlagItemCreated) != 0 and etCreate in interestingEvents:
-      event.kind = etCreate
-    elif (eventFlags and kFSEventStreamEventFlagItemRemoved) != 0 and etDelete in interestingEvents:
-      event.kind = etDelete
-    elif (eventFlags and kFSEventStreamEventFlagItemRenamed) != 0 and etRename in interestingEvents:
-      event.kind = etRename
-    else:
-      continue
-
-    ctx.config.channel[].send(event)
+    # Map FSEvent flags to our event types and construct with correct kind
+    if (itemFlags and kFSEventStreamEventFlagItemModified) != 0 and etModify in interestingEvents:
+      ctx.config.channel[].send(Event(kind: etModify, path: path))
+    elif (itemFlags and kFSEventStreamEventFlagItemCreated) != 0 and etCreate in interestingEvents:
+      ctx.config.channel[].send(Event(kind: etCreate, path: path))
+    elif (itemFlags and kFSEventStreamEventFlagItemRemoved) != 0 and etDelete in interestingEvents:
+      ctx.config.channel[].send(Event(kind: etDelete, path: path))
+    elif (itemFlags and kFSEventStreamEventFlagItemRenamed) != 0 and etRename in interestingEvents:
+      ctx.config.channel[].send(Event(kind: etRename, path: path))
 
 proc newWatcherContext(config: ptr WatcherConfig): WatcherContext =
   new(result)
@@ -138,19 +129,19 @@ proc newWatcherContext(config: ptr WatcherConfig): WatcherContext =
 proc setupWatches(ctx: WatcherContext): bool =
   var paths: seq[CFStringRef] = @[]
   var pathPtrs: seq[pointer] = @[]
-  
+
   # Create CFString for each watch path
   for watch in ctx.config.watches:
     let cfStr = CFStringCreateWithCString(nil, watch.path.cstring, kCFStringEncodingUTF8)
     if cfStr.isNil:
-      echo "Failed to create CFString for path: ", watch.path
+      echo "[fswatch] Failed to create CFString for path: ", watch.path
       return false
     paths.add(cfStr)
     pathPtrs.add(cast[pointer](cfStr))
 
   let pathsToWatch = CFArrayCreate(nil, addr pathPtrs[0], csize_t(paths.len), nil)
   if pathsToWatch.isNil:
-    echo "Failed to create CFArray"
+    echo "[fswatch] Failed to create CFArray"
     return false
 
   var context: FSEventStreamContext
@@ -171,32 +162,27 @@ proc setupWatches(ctx: WatcherContext): bool =
   )
 
   if ctx.streamRef.isNil:
-    echo "Failed to create FSEvent stream"
+    echo "[fswatch] Failed to create FSEvent stream"
     return false
 
   let runLoop = CFRunLoopGetCurrent()
   if runLoop.isNil:
-    echo "Failed to get current run loop"
+    echo "[fswatch] Failed to get current run loop"
     return false
 
-  let runLoopMode = CFStringCreateWithCString(nil, kCFRunLoopDefaultMode, kCFStringEncodingUTF8)
-  if runLoopMode.isNil:
-    echo "Failed to create run loop mode string"
-    return false
-
-  FSEventStreamScheduleWithRunLoop(ctx.streamRef, runLoop, runLoopMode)
+  FSEventStreamScheduleWithRunLoop(ctx.streamRef, runLoop, kCFRunLoopDefaultMode)
 
   if not FSEventStreamStart(ctx.streamRef):
-    echo "Failed to start FSEvent stream"
+    echo "[fswatch] Failed to start FSEvent stream"
     return false
 
   return true
 
 proc watch*(watchPtr: ptr WatcherConfig) {.thread.} =
   let ctx = newWatcherContext(watchPtr)
-  
+  GC_ref(ctx)
+
   if not setupWatches(ctx):
     return
 
-  echo "Started watching directories..."
   CFRunLoopRun()

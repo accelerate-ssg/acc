@@ -1,6 +1,5 @@
-import asyncdispatch
-
 import ./fswatch/[types, support]
+export types
 
 
 
@@ -26,18 +25,14 @@ proc newWatcherConfig*(watches: seq[Watch], callback: WatcherCallback, channel: 
 
 
 
-proc startWatching*(config: WatcherConfig) = #{.async.} =
-  var
-    thread: Thread[ptr WatcherConfig]
-    configPtr = config.addr
-  
-  createThread(thread, watch, configPtr)
+proc startWatching*(config: var WatcherConfig) =
+  var thread: Thread[ptr WatcherConfig]
+
+  createThread(thread, watch, addr config)
 
   while true:
     let event = config.channel[].recv()
     config.callback(event)
-
-  thread.joinThread()
 
 
 
@@ -46,8 +41,8 @@ when isMainModule:
   proc onFileChange(event: Event) {.gcsafe.} =
     echo "File changed: ", event.path, " (", event.kind, ")"
 
-  var channel: Channel[Event]  # Create actual Channel first
-  channel.open()              # Initialize it
+  var channel: Channel[Event]
+  channel.open()
 
   let watches = @[
     Watch(
@@ -60,7 +55,5 @@ when isMainModule:
     )
   ]
 
-  let config = newWatcherConfig(watches, onFileChange, channel)
-
-  #waitFor startWatching(config)
+  var config = newWatcherConfig(watches, onFileChange, channel)
   startWatching(config)
