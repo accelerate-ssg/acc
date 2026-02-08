@@ -1,4 +1,4 @@
-import std/[os, sequtils, strutils, tables]
+import std/[os, strutils]
 
 import global_state
 
@@ -15,7 +15,8 @@ proc mark*(key_stack:var KeyStack): void =
   key_stack.marks.add( key_stack.atoms.len )
 
 proc clear*(key_stack:var KeyStack): void =
-  key_stack.atoms.delete( key_stack.marks.pop..key_stack.atoms.len - 1 )
+  let start = key_stack.marks.pop
+  key_stack.atoms.setLen(start)
 
 proc add_path*( key_stack:var KeyStack, path:string, separator:string = "/" ) =
   if path.len == 0:
@@ -25,7 +26,7 @@ proc add_path*( key_stack:var KeyStack, path:string, separator:string = "/" ) =
     key_stack.atoms.add( path_atom )
 
 proc add_file_path*( key_stack:var KeyStack, original_path:string ) =
-  let content_root = state.config.map["content_root"]
+  let content_root = state.config.directories.content
   var path = original_path
   let (_, _, extension) = splitFile(path)
   

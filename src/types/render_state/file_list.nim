@@ -2,29 +2,24 @@ import os
 import glob
 import strutils
 import sequtils
-import times
 import sets
-import tables
+import json
 import unittest
-import sugar
 
 import logger
-from types/config import Config, Path
-from types/plugin import Plugin
-import types/config/path_helpers
+import config
 
 # Initializes a blacklist of file paths that should be ignored during file listing.
 # The blacklist currently includes paths to the build directory, the local config file,
 # and the plugins directory if these paths are subdirectories of the source directory.
 proc init_blacklist(
-  source_directory: Path,
-  destination_directory: Path,
-  local_config_path: Path
+  source_directory: string,
+  destination_directory: string,
+  config_directory: string
 ): seq[ Glob ] =
   let
     destination_is_child_of_source = destination_directory.starts_with( source_directory )
-    local_config_is_child_of_source = local_config_path.starts_with( source_directory )
-    relative_plugins_path = source_directory / "plugins"
+    config_is_child_of_source = config_directory.starts_with( source_directory )
     relative_accelerate_directory = source_directory / ".acc"
 
   result = @[]
@@ -37,24 +32,20 @@ proc init_blacklist(
       debug "Adding " & relative_destination_path & "/* to blacklist"
       result.add( glob( relative_destination_path & "/**/*" ))
 
-  if local_config_is_child_of_source:
+  if config_is_child_of_source:
     let
-      relative_config_path = relativePath( local_config_path, source_directory )
-    if relative_config_path != "." and local_config_path.dir_exists():
+      relative_config_path = relativePath( config_directory, source_directory )
+    if relative_config_path != "." and config_directory.dir_exists():
       debug "Adding " & relative_config_path & "/* to blacklist"
       result.add( glob( relative_config_path & "/**/*" ))
-
-  if relative_plugins_path.dir_exists():
-    debug "Adding " & relative_plugins_path & "/* to blacklist"
-    result.add( glob( relative_plugins_path & "/**/*" ))
 
   result.add( glob( relative_accelerate_directory & "/**/*" ))
 
 
 
 # Initializes a raw list of files from the source directory.
-proc init_raw_file_list( source_directory: Path ): HashSet[ Path ] =  
-  result = init_hash_set[Path]()
+proc init_raw_file_list( source_directory: string ): HashSet[ string ] =
+  result = init_hash_set[string]()
 
   for source_path in walk_glob( source_directory & "**/*" ):
     let
@@ -64,17 +55,17 @@ proc init_raw_file_list( source_directory: Path ): HashSet[ Path ] =
 
 
 
-# Collect all the globs from the plugins' config files.
-proc init_script_globs( plugins: seq[ Plugin ] ): seq[ Glob ] =
+# Collect all the globs from the workflow steps.
+proc init_step_globs( steps: seq[ Step ] ): seq[ Glob ] =
   result = @[]
 
-  for plugin in plugins:
-    if plugin.config.hasKey("glob"):
-      result.add( glob( plugin.config["glob"] ))
+  for step in steps:
+    if step.extraConfig != nil and step.extraConfig.hasKey("glob"):
+      result.add( glob( step.extraConfig["glob"].getStr ))
 
 
 # Filters a list of files by a list of globs and a blacklist.
-proc filter( file_list: HashSet[ Path ], globs: seq[ Glob ], blacklist: seq[ Glob ] ): seq[ Path ] =
+proc filter( file_list: HashSet[ string ], globs: seq[ Glob ], blacklist: seq[ Glob ] ): seq[ string ] =
   result = @[]
 
   for file_path in file_list:
@@ -87,21 +78,19 @@ proc filter( file_list: HashSet[ Path ], globs: seq[ Glob ], blacklist: seq[ Glo
 
 
 # Returns a list of unique, relative paths to all files in the source directory
-# that match any plugin's glob and is not in the blacklist.
-proc init_file_list*( config: Config ): seq[ Path ] =
+# that match any step's glob and is not in the blacklist.
+proc init_file_list*( cfg: Config, steps: seq[ Step ] ): seq[ string ] =
   let
-    globs = init_script_globs(
-      config.plugins
-    )
+    globs = init_step_globs( steps )
     blacklist = init_blacklist(
-      config.source_directory,
-      config.destination_directory,
-      config.local_config_path
+      cfg.directories.src,
+      cfg.directories.destination,
+      cfg.directories.config
     )
     raw_file_list = init_raw_file_list(
-      config.source_directory
+      cfg.directories.src
     )
-  
+
   result = raw_file_list.filter( globs, blacklist )
 
   warn "[FILTERED FILE LIST]", $result
@@ -118,19 +107,13 @@ suite "File handling tests":
       nested_destination_dir = source_dir / "public"
       content_dir = temp_dir / "content"
       accelerate_dir = temp_dir / ".acc"
-      plugins_dir = accelerate_dir / "plugins"
       build_dir = accelerate_dir / "build"
-
-      plugins: seq[Plugin] = @[
-        Plugin(name: "TestPlugin", script: "script", function: "function", after: @[], before: @[], config: {"glob": "*.nim"}.toTable),
-      ]
 
     createDir( source_dir )
     createDir( destination_dir )
     createDir( nested_destination_dir )
     createDir( content_dir )
     createDir( accelerate_dir )
-    createDir( plugins_dir )
     createDir( build_dir )
     writeFile( source_dir / "test.nim", "test file" )
     writeFile( source_dir / "test.txt", "test file" )
@@ -153,16 +136,22 @@ suite "File handling tests":
       file_list = init_raw_file_list(source_dir)
     check file_list.len == 2
 
-  test "init_script_globs":
+  test "init_step_globs":
     let
-      globs = init_script_globs(plugins)
+      steps: seq[Step] = @[
+        Step(module: "@copy", extraConfig: %*{"glob": "*.nim"}),
+      ]
+      globs = init_step_globs(steps)
     check globs.len == 1
     check globs[0].pattern == "*.nim"
 
   test "filter":
     let
+      steps: seq[Step] = @[
+        Step(module: "@copy", extraConfig: %*{"glob": "*.nim"}),
+      ]
       blacklist = init_blacklist(source_dir, destination_dir, content_dir)
-      globs = init_script_globs(plugins)
+      globs = init_step_globs(steps)
       file_list = init_raw_file_list(source_dir)
       filtered_list = filter(file_list, globs, blacklist)
     check filtered_list.len == 1

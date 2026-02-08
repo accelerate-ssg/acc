@@ -1,13 +1,11 @@
-import std/[json, tables, strutils, sets, os]
+import std/[json, os]
 import yaml/[tojson, native, parser]
 import logger
 import glob
 
 import global_state
-import types/plugin
-import types/config
-import types/config/path_helpers
-import action/internal_functions/[utils, config, key_stack]
+import config
+import action/internal_functions/[step_helpers, key_stack]
 
 var stack = newKeyStack()
 
@@ -22,11 +20,11 @@ proc parse(absolute_path: string, relative_path: string) =
     var context_node: JsonNode = json_nodes_seq[0]
 
     if json_nodes_seq.len > 1:
-      context_node = newJArray() # Create a new JSON array node
-      for jsonNode in json_nodes_seq: # Add the elements from the sequence to the array
+      context_node = newJArray()
+      for jsonNode in json_nodes_seq:
         context_node.add(jsonNode)
 
-    state.context{stack.atoms} = context_node # Store the JsonNode in the state
+    state.context{stack.atoms} = context_node
   except IOError:
     fatal "Error reading file ", absolute_path
     raise
@@ -45,15 +43,15 @@ proc parse(absolute_path: string, relative_path: string) =
   finally:
     stack.clear()
 
-proc run*(plugin: Plugin) =
-  let glob = plugin.glob( DEFAULT_CONTENT_DIRECTORY / "**/*.{yml,yaml}")
-  let context_path_prefix = plugin.context_path_prefix("")
-  stack.add_dotted_path( context_path_prefix )
+proc run*(step: Step) =
+  let
+    content_dir = state.config.directories.content
+    glob = step.glob(content_dir / "**/*.{yml,yaml}")
+    context_path_prefix = step.context_path_prefix("")
 
-  warn "plugin.config: ", plugin.config
-  warn "plugin: ", plugin
+  stack.add_dotted_path(context_path_prefix)
 
-  for file in walk_dir_rec( state.config.content_directory, relative = true ):
+  for file in walk_dir_rec(content_dir, relative = true):
     if file.matches(glob):
       notice "Parsing: ", file
-      parse( state.config.content_directory / file, file )
+      parse(content_dir / file, file)

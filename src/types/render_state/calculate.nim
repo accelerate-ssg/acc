@@ -3,14 +3,14 @@ import sequtils
 import sugar
 
 import logger
-import types/config
+import config
 import types/render_state
 import file_list
 import file_router
 
-proc calculate_render_state*( config: Config, context: JsonNode ): RenderState =
+proc calculate_render_state*( cfg: Config, steps: seq[Step], context: JsonNode ): RenderState =
   let
-    file_list = init_file_list( config )
+    file_list = init_file_list( cfg, steps )
 
   result = @[]
 

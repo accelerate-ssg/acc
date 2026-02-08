@@ -1,25 +1,15 @@
 import std/[os]
-import types/plugin
 import glob
-import strutils
-import tables
 
 import global_state
-import types/config/path_helpers
-import action/internal_functions/utils
+import config
+import action/internal_functions/step_helpers
 
-
-
-proc glob(plugin: Plugin): Glob =
-  result = glob("*.mustache")
-  if plugin.config.has_key("glob"):
-    result = glob(plugin.config["glob"])
-
-proc run*(plugin: Plugin) =
+proc run*(step: Step) =
   let
-    glob = plugin.glob()
-    source_directory = state.config.source_directory
-    destination_directory = state.config.destination_directory
+    glob = step.glob()
+    source_directory = state.config.directories.src
+    destination_directory = state.config.directories.destination
 
   for absolute_path in walk_dir_rec( source_directory ):
     let

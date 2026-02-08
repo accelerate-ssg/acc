@@ -4,6 +4,8 @@ import logger
 import global_state
 import config
 import modules/script_runner/[types, loader, runner]
+import action/internal_functions/[copy, yaml_loader, mustache_renderer, markdown_renderer]
+import types/render_state/calculate
 
 const dynlibExts = [".dll", ".so", ".dylib"]
 
@@ -49,37 +51,13 @@ proc runModuleStep(step: Step, state: State) =
 
   case name:
   of "copy":
-    let
-      glob = if step.extraConfig != nil and step.extraConfig.hasKey("glob"):
-               step.extraConfig["glob"].getStr
-             else: "**/*"
-      src = state.config.directories.src
-      dest = state.config.directories.destination
-
-    if src == "" or dest == "":
-      warn "Source or destination directory not configured, skipping copy"
-      return
-
-    for absolutePath in walkDirRec(src):
-      let
-        relativePath = absolutePath.relativePath(src)
-        destinationPath = dest / relativePath
-
-      if relativePath.contains(glob) or glob == "**/*":
-        if not destinationPath.parentDir.dirExists:
-          destinationPath.parentDir.createDir
-        copyFile(absolutePath, destinationPath)
-        debug "Copied: ", relativePath
-
+    copy.run(step)
   of "yaml":
-    notice "YAML loader not yet connected to new workflow engine"
-
+    yaml_loader.run(step)
   of "markdown":
-    notice "Markdown renderer not yet connected to new workflow engine"
-
+    markdown_renderer.run(step)
   of "mustache":
-    notice "Mustache renderer not yet connected to new workflow engine"
-
+    mustache_renderer.run(step)
   else:
     error "Unknown module: ", name
 
@@ -173,6 +151,9 @@ proc runWorkflow*(state: State, workflow: Workflow, depth: int = 0) =
       runWorkflow(state, childWorkflow, depth + 1)
 
   elif workflow.isLeaf:
+    # Calculate render state for this workflow's steps
+    state.render_state = calculate_render_state(state.config, workflow.steps, state.context)
+
     # Run steps
     for step in workflow.steps:
       runStep(step, state)

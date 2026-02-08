@@ -1,9 +1,8 @@
 import json
-import sequtils
-
-from types/config import Path
 
 type
+  Path* = string
+
   RenderStateItem* = ref object
     source_path*: Path
     output_path*: Path
@@ -11,9 +10,7 @@ type
     item*: JsonNode
     items*: JsonNode
 
-  RenderState* = seq[
-    RenderStateItem
-  ]
+  RenderState* = seq[RenderStateItem]
 
 proc init_render_state_item*(
   source_path: Path,

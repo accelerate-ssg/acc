@@ -1,45 +1,26 @@
-import std/[os]
+import std/[os, json, strutils, tables]
 import global_state
-import types/plugin
+import config
 import logger
 import glob
 import mustache
-import tables
-import strutils
-import sets
 
-import types/config/path_helpers
-import action/internal_functions/utils
-
-proc search_dirs(plugin: Plugin): seq[string] =
-  result = @["./", state.config.source_directory]
-  if plugin.config.has_key("search_dirs"):
-    for path in plugin.config["search_dirs"].split(','):
-      result.add(path.strip)
-  for path in result:
-    let
-      file_path = path / "partials/main_nav.mustache" 
-
-proc glob(plugin: Plugin): Glob =
-  result = glob("*.mustache")
-  if plugin.config.has_key("glob"):
-    result = glob(plugin.config["glob"])
+import action/internal_functions/step_helpers
 
 proc render(context: Context, path: string): string =
   let
     template_file = readFile(path)
-
   result = template_file.render(context)
 
-proc run*(plugin: Plugin) =
+proc run*(step: Step) =
   var context = new_context(
-    searchDirs = plugin.search_dirs(),
+    searchDirs = step.search_dirs(),
     values = state.context.toValues()
   )
 
   let
-    glob = plugin.glob()
-    build_dir = state.config.build_directory
+    glob = step.glob("*.mustache")
+    build_dir = state.config.directories.build
 
   for render_item in state.render_state:
     let
@@ -47,7 +28,7 @@ proc run*(plugin: Plugin) =
 
     if render_item.source_path.matches(glob):
       let
-        destination_path = state.config.destination_directory / render_item.output_path
+        destination_path = state.config.directories.destination / render_item.output_path
 
       if not destination_path.parentDir.dirExists():
         destination_path.parentDir.createDir()
@@ -73,6 +54,5 @@ proc run*(plugin: Plugin) =
           return "0"
       context["item"] = render_item.item
       context["items"] = render_item.items
-
 
       write_file(destination_path, context.render(absolute_path))
