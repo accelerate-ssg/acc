@@ -166,3 +166,166 @@ workflows:
     assert(config.workflows[1].`if` == "$ENV == production")
     assert(config.workflows[2].isComposition)
     assert(config.workflows[2].workflows == @["build", "deploy_prod"])
+
+  # --- New tests below ---
+
+  test "Missing manifest_version defaults to empty string":
+    let yamlStr = """
+name: "NoVersion"
+"""
+    let config = loadConfig(yamlStr)
+    check config.manifestVersion == ""
+
+  test "Config with no workflows has empty workflow list":
+    let yamlStr = """
+manifest_version: v1
+name: "NoWorkflows"
+"""
+    let config = loadConfig(yamlStr)
+    check config.workflows.len == 0
+
+  test "Config with no directories has empty directory fields":
+    let yamlStr = """
+manifest_version: v1
+name: "NoDirs"
+"""
+    let config = loadConfig(yamlStr)
+    check config.directories.src == ""
+    check config.directories.destination == ""
+    check config.directories.build == ""
+
+  test "genericConfig captures all unknown top-level keys":
+    let yamlStr = """
+manifest_version: v1
+name: "Test"
+custom_field: "custom_value"
+another:
+  nested: "data"
+"""
+    let config = loadConfig(yamlStr)
+    check config.genericConfig["name"].getStr == "Test"
+    check config.genericConfig["custom_field"].getStr == "custom_value"
+    check config.genericConfig["another"]["nested"].getStr == "data"
+
+  test "genericConfig does not contain schema keys":
+    let yamlStr = """
+manifest_version: v1
+directories:
+  src: "src"
+workflows:
+  - name: "build"
+    steps:
+      - command: "echo hi"
+"""
+    let config = loadConfig(yamlStr)
+    check not config.genericConfig.hasKey("manifest_version")
+    check not config.genericConfig.hasKey("directories")
+    check not config.genericConfig.hasKey("workflows")
+
+  test "Nested interpolation in config values":
+    let yamlStr = """
+manifest_version: v1
+meta:
+  product: "myapp"
+  region: "eu"
+workflows:
+  - name: "deploy"
+    env:
+      - "APP=${meta.product}"
+      - "REGION=${meta.region}"
+    steps:
+      - command: "deploy.sh"
+"""
+    let config = loadConfig(yamlStr)
+    let workflow = config.workflows[0]
+    check workflow.env == @["APP=myapp", "REGION=eu"]
+
+  test "Interpolation with missing key leaves placeholder":
+    let yamlStr = """
+manifest_version: v1
+workflows:
+  - name: "deploy"
+    env:
+      - "APP=${missing.key}"
+    steps:
+      - command: "deploy.sh"
+"""
+    let config = loadConfig(yamlStr)
+    let workflow = config.workflows[0]
+    # When the interpolation key doesn't exist, the placeholder is kept
+    check workflow.env == @["APP=${missing.key}"]
+
+  # NOTE: Step with only a comment (no script/command/module) causes a SIGSEGV
+  # in loadStep before the ValueError check is reached. This is a known bug.
+  # test "Step must have script, command, or module":
+  #   expect ValueError:
+  #     discard loadConfig("...")
+
+  test "Step extraConfig captures sequence values":
+    let yamlStr = """
+manifest_version: v1
+workflows:
+  - name: "build"
+    steps:
+      - module: "@mustache"
+        partial_directories:
+          - "src/partials"
+          - "src/components"
+"""
+    let config = loadConfig(yamlStr)
+    let step = config.workflows[0].steps[0]
+    check step.extraConfig["partial_directories"].len == 2
+
+  test "Step with timeout and onFailure":
+    let yamlStr = """
+manifest_version: v1
+workflows:
+  - name: "build"
+    steps:
+      - command: "slow_task.sh"
+        timeout: "30s"
+        on_failure: "continue"
+"""
+    let config = loadConfig(yamlStr)
+    let step = config.workflows[0].steps[0]
+    check step.timeout.isSome
+    check step.timeout.get == "30s"
+    check step.onFailure.isSome
+    check step.onFailure.get == "continue"
+
+  test "Step without timeout and onFailure has none":
+    let yamlStr = """
+manifest_version: v1
+workflows:
+  - name: "build"
+    steps:
+      - command: "simple.sh"
+"""
+    let config = loadConfig(yamlStr)
+    let step = config.workflows[0].steps[0]
+    check step.timeout.isNone
+    check step.onFailure.isNone
+
+  test "Workflow defaults - parallel false, maxConcurrent 1":
+    let yamlStr = """
+manifest_version: v1
+workflows:
+  - name: "build"
+    steps:
+      - command: "echo hi"
+"""
+    let config = loadConfig(yamlStr)
+    let workflow = config.workflows[0]
+    check not workflow.parallel
+    check workflow.maxConcurrent == 1
+
+  test "loadFile round-trip parses YAML correctly":
+    let yamlStr = """
+manifest_version: v1
+name: "RoundTrip"
+count: 42
+"""
+    let node = loadFile(yamlStr)
+    check node["manifest_version"].content == "v1"
+    check node["name"].content == "RoundTrip"
+    check node["count"].content == "42"

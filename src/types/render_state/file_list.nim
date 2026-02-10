@@ -12,7 +12,7 @@ import config
 # Initializes a blacklist of file paths that should be ignored during file listing.
 # The blacklist currently includes paths to the build directory, the local config file,
 # and the plugins directory if these paths are subdirectories of the source directory.
-proc init_blacklist(
+proc init_blacklist*(
   source_directory: string,
   destination_directory: string,
   config_directory: string
@@ -44,7 +44,7 @@ proc init_blacklist(
 
 
 # Initializes a raw list of files from the source directory.
-proc init_raw_file_list( source_directory: string ): HashSet[ string ] =
+proc init_raw_file_list*( source_directory: string ): HashSet[ string ] =
   result = init_hash_set[string]()
 
   for source_path in walk_glob( source_directory & "**/*" ):
@@ -56,7 +56,7 @@ proc init_raw_file_list( source_directory: string ): HashSet[ string ] =
 
 
 # Collect all the globs from the workflow steps.
-proc init_step_globs( steps: seq[ Step ] ): seq[ Glob ] =
+proc init_step_globs*( steps: seq[ Step ] ): seq[ Glob ] =
   result = @[]
 
   for step in steps:
@@ -65,7 +65,7 @@ proc init_step_globs( steps: seq[ Step ] ): seq[ Glob ] =
 
 
 # Filters a list of files by a list of globs and a blacklist.
-proc filter( file_list: HashSet[ string ], globs: seq[ Glob ], blacklist: seq[ Glob ] ): seq[ string ] =
+proc filter*( file_list: HashSet[ string ], globs: seq[ Glob ], blacklist: seq[ Glob ] ): seq[ string ] =
   result = @[]
 
   for file_path in file_list:

@@ -8,4 +8,4 @@ include config/cli
 
 # Example usage
 when isMainModule and not defined(release):
-  include ../test/config
+  include ../test/test_config
