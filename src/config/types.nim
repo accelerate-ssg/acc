@@ -42,6 +42,7 @@ type
     action*: Action
     logLevel*: LogLevel
     runWorkflow*: string
+    showMe*: string
     directories*: Directories
     workflows*: seq[Workflow]
     genericConfig*: JsonNode

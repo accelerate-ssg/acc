@@ -29,11 +29,13 @@ Build/Dev options:
 Options:
   -l, --log LEVEL        Log level: all, debug, info, warning, error,
                          fatal, silent [default: info]
+  -m, --show-me ASPECT   Dump internal state as JSON and exit
+                         (config, files)
   -h, --help             Print this help message
   -v, --version          Print version information
 """
 
-proc resolveDir(root: string, value: string): string =
+proc resolveDir*(root: string, value: string): string =
   if value == "":
     return ""
   absolutePath(normalizedPath(root / value))
@@ -124,3 +126,7 @@ proc parseCliArgs*(): Config =
   of "fatal": result.logLevel = lvlFatal
   of "silent": result.logLevel = lvlNone
   else: discard
+
+  # Parse --show-me
+  if args["--show-me"]:
+    result.showMe = $args["--show-me"]
