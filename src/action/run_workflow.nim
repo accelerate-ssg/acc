@@ -4,7 +4,8 @@ import logger
 import global_state
 import config
 import modules/script_runner/[types, loader, runner]
-import action/internal_functions/[copy, yaml_loader, mustache_renderer, markdown_renderer]
+import action/internal_functions/[copy, yaml_loader, markdown_renderer]
+import plugins/registry
 import types/render_state/calculate
 
 const dynlibExts = [".dll", ".so", ".dylib"]
@@ -49,6 +50,13 @@ proc runModuleStep(step: Step, state: State) =
   let name = if moduleName.startsWith("@"): moduleName[1..^1] else: moduleName
   notice "Running module: ", name
 
+  # Check plugin registry first (template engines)
+  if hasEngine(name):
+    let engine = getEngine(name)
+    engine.run(step, state)
+    return
+
+  # Built-in modules
   case name:
   of "copy":
     copy.run(step)
@@ -56,8 +64,6 @@ proc runModuleStep(step: Step, state: State) =
     yaml_loader.run(step)
   of "markdown":
     markdown_renderer.run(step)
-  of "mustache":
-    mustache_renderer.run(step)
   else:
     error "Unknown module: ", name
 

@@ -5,6 +5,8 @@ import logger
 import config
 import action/[build,test,clean,run,dev_server,init,run_workflow]
 import types/render_state/file_list
+import plugins/registry
+import plugins/mustache_engine
 
 proc ctrl_c_handler() {.noconv.} =
   notice "Force quit."
@@ -37,6 +39,9 @@ proc main() =
 
   state.config = parseCliArgs()
   set_log_level( logger.LogLevel(ord(state.config.logLevel)) )
+
+  # Register built-in template engines
+  registerEngine("mustache", mustache_engine.plugin)
 
   if state.config.showMe != "":
     showMe(state.config.showMe)
