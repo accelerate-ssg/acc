@@ -115,6 +115,13 @@ build if they need some specialized executable for example. At your own risk of
 cause, but at least there is an easy escape hatch for the places where you need
 one.
 
+## Installation
+
+### MacOS
+
+1. Place the binary in your path, for instance in `~/bin`.
+2. Install pcre. With brew: `brew install pcre`
+
 ## Development
 
 Clone then run using `nimble -d:debug -d:nimDebugDlOpen -p:src --threads:on
@@ -126,6 +133,18 @@ is the binary to build/run and the arguments to it.
 ## Production build
 
 `nimble build -d:release -p:src --threads:on --mm:orc --deepcopy:on`
+
+## Releasing
+
+Releases use semantic versioning with git tags (e.g., `v1.0.0`, `v1.2.3`).
+
+```sh
+# Create an annotated tag
+git tag -a v1.0.0 -m "Release v1.0.0"
+
+# Push the tag to remote
+git push origin v1.0.0
+```
 
 # Attribution
 
