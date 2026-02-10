@@ -7,6 +7,7 @@ import action/[build,test,clean,run,dev_server,init,run_workflow]
 import types/render_state/file_list
 import plugins/registry
 import plugins/mustache_engine
+import acc_liquid
 
 proc ctrl_c_handler() {.noconv.} =
   notice "Force quit."
@@ -42,6 +43,7 @@ proc main() =
 
   # Register built-in template engines
   registerEngine("mustache", mustache_engine.plugin)
+  registerEngine("liquid", acc_liquid.plugin)
 
   if state.config.showMe != "":
     showMe(state.config.showMe)
