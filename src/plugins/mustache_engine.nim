@@ -21,10 +21,10 @@ proc run(step: Step, state: State) =
 
   let
     stepGlob = step.glob("*.mustache")
-    build_dir = state.config.directories.build
+    src_dir = state.config.directories.src
 
   for render_item in state.render_state:
-    let absolute_path = build_dir / render_item.source_path
+    let absolute_path = src_dir / render_item.source_path
 
     if render_item.source_path.matches(stepGlob):
       let destination_path = state.config.directories.destination / render_item.output_path
