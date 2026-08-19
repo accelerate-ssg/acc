@@ -27,3 +27,17 @@ src/**
 !src/**/*.txt
 !src/**/*.html
 !src/**/*.js
+
+# macOS
+.DS_Store
+
+# Built binary at repo root
+/acc
+
+# Compiled test binaries
+test/render_paths
+test/test_cli
+
+# Atlas-vendored dependency checkouts (own git repos)
+/ws
+/packages
