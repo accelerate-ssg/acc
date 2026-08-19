@@ -83,7 +83,7 @@ logger = initLogger("accelerate.json")
 addExitProc(resetAttributes)
 enableTrueColors()
 
-when isMainModule and not defined(release):
+when not defined(release):
   import unittest
   import os
 

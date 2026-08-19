@@ -4,7 +4,6 @@ import strutils
 import sequtils
 import sets
 import json
-import unittest
 
 import logger
 import config
@@ -97,62 +96,65 @@ proc init_file_list*( cfg: Config, steps: seq[ Step ] ): seq[ string ] =
 
 
 
-suite "File handling tests":
+when not defined(release):
+  import unittest
 
-  setup:
-    let
-      temp_dir = get_temp_dir() / "accelerate_test"
-      source_dir = temp_dir / "src"
-      destination_dir = temp_dir / "public"
-      nested_destination_dir = source_dir / "public"
-      content_dir = temp_dir / "content"
-      accelerate_dir = temp_dir / ".acc"
-      build_dir = accelerate_dir / "build"
+  suite "File handling tests":
 
-    createDir( source_dir )
-    createDir( destination_dir )
-    createDir( nested_destination_dir )
-    createDir( content_dir )
-    createDir( accelerate_dir )
-    createDir( build_dir )
-    writeFile( source_dir / "test.nim", "test file" )
-    writeFile( source_dir / "test.txt", "test file" )
+    setup:
+      let
+        temp_dir = get_temp_dir() / "accelerate_test"
+        source_dir = temp_dir / "src"
+        destination_dir = temp_dir / "public"
+        nested_destination_dir = source_dir / "public"
+        content_dir = temp_dir / "content"
+        accelerate_dir = temp_dir / ".acc"
+        build_dir = accelerate_dir / "build"
 
-  teardown:
-    removeDir( temp_dir )
+      createDir( source_dir )
+      createDir( destination_dir )
+      createDir( nested_destination_dir )
+      createDir( content_dir )
+      createDir( accelerate_dir )
+      createDir( build_dir )
+      writeFile( source_dir / "test.nim", "test file" )
+      writeFile( source_dir / "test.txt", "test file" )
 
-  test "init_blacklist":
-    let
-      blacklist = init_blacklist(source_dir, destination_dir, content_dir)
-    check blacklist.len == 1
+    teardown:
+      removeDir( temp_dir )
 
-  test "init_blacklist":
-    let
-      blacklist = init_blacklist(source_dir, nested_destination_dir, content_dir)
-    check blacklist.len == 2
+    test "init_blacklist":
+      let
+        blacklist = init_blacklist(source_dir, destination_dir, content_dir)
+      check blacklist.len == 1
 
-  test "init_raw_file_list":
-    let
-      file_list = init_raw_file_list(source_dir)
-    check file_list.len == 2
+    test "init_blacklist":
+      let
+        blacklist = init_blacklist(source_dir, nested_destination_dir, content_dir)
+      check blacklist.len == 2
 
-  test "init_step_globs":
-    let
-      steps: seq[Step] = @[
-        Step(module: "@copy", extraConfig: %*{"glob": "*.nim"}),
-      ]
-      globs = init_step_globs(steps)
-    check globs.len == 1
-    check globs[0].pattern == "*.nim"
+    test "init_raw_file_list":
+      let
+        file_list = init_raw_file_list(source_dir)
+      check file_list.len == 2
 
-  test "filter":
-    let
-      steps: seq[Step] = @[
-        Step(module: "@copy", extraConfig: %*{"glob": "*.nim"}),
-      ]
-      blacklist = init_blacklist(source_dir, destination_dir, content_dir)
-      globs = init_step_globs(steps)
-      file_list = init_raw_file_list(source_dir)
-      filtered_list = filter(file_list, globs, blacklist)
-    check filtered_list.len == 1
-    check filtered_list[0] == "test.nim"
+    test "init_step_globs":
+      let
+        steps: seq[Step] = @[
+          Step(module: "@copy", extraConfig: %*{"glob": "*.nim"}),
+        ]
+        globs = init_step_globs(steps)
+      check globs.len == 1
+      check globs[0].pattern == "*.nim"
+
+    test "filter":
+      let
+        steps: seq[Step] = @[
+          Step(module: "@copy", extraConfig: %*{"glob": "*.nim"}),
+        ]
+        blacklist = init_blacklist(source_dir, destination_dir, content_dir)
+        globs = init_step_globs(steps)
+        file_list = init_raw_file_list(source_dir)
+        filtered_list = filter(file_list, globs, blacklist)
+      check filtered_list.len == 1
+      check filtered_list[0] == "test.nim"

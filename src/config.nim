@@ -8,5 +8,5 @@ include config/json_serialization
 include config/cli
 
 # Example usage
-when isMainModule and not defined(release):
+when not defined(release):
   include ../test/test_config

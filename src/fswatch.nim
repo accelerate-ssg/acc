@@ -37,7 +37,7 @@ proc startWatching*(config: var WatcherConfig) =
 
 
 # Usage example
-when isMainModule:
+when isMainModule and not defined(release):
   proc onFileChange(event: Event) {.gcsafe.} =
     echo "File changed: ", event.path, " (", event.kind, ")"
 
