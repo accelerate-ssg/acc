@@ -82,7 +82,7 @@ proc render_array_match*( context: JsonNode, attribute_name: string, partial: Re
       items = context.filter_items_on(attribute_name, json_value)
 
     result.add( partial.init_render_state_item(
-      output_path = partial.output_path / "index.html",
+      output_path = partial.output_path / string_value.strip() & ".html",
       item = json_value,
       items = items,
     ))
