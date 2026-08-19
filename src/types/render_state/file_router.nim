@@ -1,201 +1,249 @@
-import json, strutils, sequtils, re, os
+## Expands a parsed template path into the pages it produces.
+##
+## The template is parsed once, up front, and then expanded. Expansion only ever
+## produces values, never new template text, so a data value containing braces
+## or parentheses is inert.
+##
+## Router behaviour is specified by test/path_router_spec.nim.
+
+import json, strutils, sets, tables
+import std/options
 
 import logger
 import types/render_state
+import path_template
 import node_to_string
-import indifferent_iterator
-# Intentionally named to match the matcher it represents. Nim does not allow for non word characters in identifiers.
-import ｛attribute_match｝
-import ［array_match］
-import （key_match）
+
+type
+  Frame = object
+    ## Where a branch of the expansion currently stands.
+    scope: JsonNode
+      ## What a . prefix resolves against, and what a literal template takes as
+      ## its item. After a merged segment this is the group, not one element.
+    elements: seq[JsonNode]
+      ## The elements the enclosing binding contributed.
+    bound: JsonNode
+      ## What a deeper binding reports as parent, carrying its own parent so
+      ## templates can walk up. nil at the root, and nil once a segment has
+      ## merged several elements, because then there is no single parent.
+    bound_parent: JsonNode
+      ## What a literal template at this level reports as parent.
+    key: string
 
 
+proc normalize(node: JsonNode): string =
+  ## The single conversion used both to name a page and to compare in a filter,
+  ## so a name and the filter that selects it can never disagree.
+  node_to_string(node).strip()
 
-let
-  AttributeMatch = re"\{(.*?)\}"
-  ArrayMatch = re"\[(.*?)\]"
-  KeyMatch = re"\((.*?)\)"
+proc as_set(node: JsonNode): HashSet[string] =
+  ## Both sides of a comparison become sets, a scalar being a set of one, so a
+  ## foreign key holding "junkkari" or ["junkkari"] behaves the same way.
+  result = initHashSet[string]()
 
-proc parseDottedRef(raw: string): (string, string) =
-  ## Splits a dotted reference like "manufacturers.path" into
-  ## collection name ("manufacturers") and attribute ("path").
-  let dot_pos = raw.find('.')
-  if dot_pos >= 0:
-    return (raw[0 ..< dot_pos], raw[dot_pos + 1 .. ^1])
-  return ("", "")
+  if node.isNil:
+    return
 
-proc resolveDynamicDirSegment(context: JsonNode, segment: string): seq[(string, JsonNode)] =
-  ## Resolves a dynamic directory segment like {manufacturers.path} into
-  ## a list of (resolved_path_value, item_context) pairs.
-  let
-    attr_bounds = segment.findBounds(re"\{(.*?)\}")
-    key_bounds = segment.findBounds(re"\((.*?)\)")
+  case node.kind
+  of JArray:
+    for element in node:
+      if element.kind == JObject or element.kind == JArray:
+        warn "Ignoring a non scalar value in a comparison: ", $element
+      else:
+        let text = normalize(element)
+        if text.len > 0:
+          result.incl(text)
+  of JObject:
+    warn "An object cannot be compared: ", $node
+  of JNull:
+    discard
+  else:
+    let text = normalize(node)
+    if text.len > 0:
+      result.incl(text)
 
-  if attr_bounds != (-1,0):
-    let raw = segment[attr_bounds[0]+1 .. attr_bounds[1]-1]
-    let (collection_name, attribute_name) = parseDottedRef(raw)
-    let col = if collection_name.len > 0: context{collection_name} else: nil
-    if col == nil:
-      return @[]
-    for item in col.each():
-      if item.kind == JObject:
-        let attr = if attribute_name.len > 0: attribute_name else: raw
-        let val = node_to_string(item{attr})
-        if val != "":
-          result.add((val, item))
-  elif key_bounds != (-1,0):
-    let raw = segment[key_bounds[0]+1 .. key_bounds[1]-1]
-    let (collection_name, _) = parseDottedRef(raw)
-    let col = if collection_name.len > 0: context{collection_name} else: nil
-    if col == nil:
-      return @[]
-    if col.kind == JObject:
-      for key, val in col.pairs:
-        result.add((key, val))
-    elif col.kind == JArray:
-      for i, val in col.elems:
-        result.add(($i, val))
+proc dig(node: JsonNode, path: seq[string]): JsonNode =
+  result = node
+  for atom in path:
+    if result.isNil or result.kind != JObject:
+      return nil
+    result = result{atom}
 
-proc isDynamic(segment: string): bool =
-  segment.contains('{') or segment.contains('(') or segment.contains('[')
+iterator entries(node: JsonNode): (string, JsonNode) =
+  ## Yields the name an element takes when there is no selector, and the element.
+  if node.kind == JObject:
+    for key, value in node:
+      yield (key, value)
+  elif node.kind == JArray:
+    var index = 0
+    for value in node:
+      yield ($index, value)
+      index.inc
 
-# Iterate over a JSON object and create paths for each key.
-# original_source_path is the on-disk template path, used when dynamic directory
-# segments are resolved (the output path changes but the source stays the same).
-proc calculate_render_state_items_for*(context: JsonNode, source_path: string, original_source_path: string = ""): seq[RenderStateItem] =
-  var
-    local_context = context
+proc resolve_reference(frame: Frame, reference: Reference, source_path: string): JsonNode =
+  case reference.kind
+  of refKey:
+    return %frame.key
+  of refParent:
+    if frame.bound.isNil:
+      raise newException(ValueError,
+        "$parent is not available in '" & source_path &
+        "' because the enclosing segment merged several elements onto one page." &
+        " Use $key, or bind a single element.")
+    return dig(frame.bound, reference.path)
 
-  let
-    tokens = source_path.split('/')
-    (output_path, filename, _) = split_file( source_path )
-    context_path = (if output_path.len > 0: output_path.split('/') else: @[])
-
-    attribute_match = filename.findBounds( AttributeMatch )
-    array_match = filename.findBounds( ArrayMatch )
-    key_match = filename.findBounds( KeyMatch )
-
+proc names_for(element: JsonNode, default_name: string, selector: Selector): seq[string] =
   result = @[]
 
-  # Check for dynamic directory segments like {manufacturers.path} in the path.
-  # These expand the template into multiple items, one per resolved value.
-  # E.g. "produkter/{manufacturers.path}/{products.id}.mustache" expands
-  # {manufacturers.path} into kubota, junkkari, etc. and for each, resolves
-  # the products within that manufacturer's context.
-  for i, token in context_path:
-    if token.isDynamic:
-      let resolved = resolveDynamicDirSegment(context, token)
-      if resolved.len == 0:
-        warn "Skipping Dynamic directory segment '", token, "' resolved to nothing."
-        return
-      # For each resolved value, reconstruct the path with the resolved value
-      # and recurse with the item's context. Use the original last token (with
-      # extension) since split_file strips extensions that interfere with
-      # dotted notation like {products.id}.mustache.
+  if selector.attribute.len == 0:
+    return @[default_name]
+
+  let value = dig(element, selector.attribute)
+
+  if value.isNil:
+    return @[]
+
+  # An attribute names one page per scalar it holds, whether it holds one value
+  # or a list of them. Naming has to tolerate shape the same way comparison
+  # does, or a template breaks the day a customer's scalar arrives wrapped in an
+  # array. The trailing [] stays available to say a list is expected, and warns
+  # when it is not.
+  if value.kind == JArray:
+    for entry in value:
+      let text = normalize(entry)
+      if text.len > 0:
+        result.add(text)
+  else:
+    if selector.flatten:
+      warn "'", selector.attribute.join("."), "[]' expected a list but found ",
+        $value.kind, ", naming it as a single value."
+
+    let text = normalize(value)
+    if text.len > 0:
+      result.add(text)
+
+proc source_for(context: JsonNode, frame: Frame, binding: Binding): JsonNode =
+  if binding.scoped:
+    if binding.collection.len == 0: frame.scope
+    else: dig(frame.scope, binding.collection)
+  else:
+    dig(context, binding.collection)
+
+proc group_elements(
+  frame: Frame,
+  binding: Binding,
+  source: JsonNode,
+  source_path: string
+): OrderedTable[string, seq[JsonNode]] =
+  ## Filters, names, and groups. Elements landing on the same name merge, which
+  ## is all that grouping is. Insertion order is kept so the output order
+  ## follows the order of the data.
+  result = initOrderedTable[string, seq[JsonNode]]()
+
+  for default_name, element in source.entries:
+    if binding.filter.isSome:
       let
-        prefix = context_path[0 ..< i].join("/")
-        suffix_parts = context_path[i + 1 .. ^1]
-        original_filename = tokens[^1]  # Last token preserves full filename with ext
-      for (resolved_value, item_context) in resolved:
-        let new_dir = if prefix.len > 0: prefix & "/" & resolved_value
-                      else: resolved_value
-        let remaining = if suffix_parts.len > 0: suffix_parts.join("/") & "/" & original_filename
-                        else: original_filename
-        let new_source_path = new_dir & "/" & remaining
-        # Recurse with the item's context merged: the item becomes the local
-        # context for further resolution
-        var merged_context = context.copy()
-        # Make the item available for nested lookups
-        for key, val in item_context.pairs:
-          merged_context[key] = val
-        let orig = if original_source_path.len > 0: original_source_path else: source_path
-        result = result.concat(
-          merged_context.calculate_render_state_items_for(new_source_path, orig)
-        )
-      return
+        filter = binding.filter.get()
+        left = as_set(dig(element, filter.attribute))
+        right = as_set(resolve_reference(frame, filter.reference, source_path))
 
-  # Check if the filename uses dotted notation like {collection.attribute},
-  # [collection.attribute], or (collection.key). Dotted notation resolves the
-  # first part from root context, decoupling URL structure from data structure.
-  # E.g. "produkter/{manufacturers.path}.mustache" iterates root context
-  # "manufacturers" and uses "path" as the attribute, outputting under "produkter/".
-  var
-    root_collection_name = ""
-    resolved_attribute_name = ""
+      if (left * right).len == 0:
+        continue
 
-  if attribute_match != (-1,0):
-    let raw = filename[attribute_match[0]+1 .. attribute_match[1]-1]
-    (root_collection_name, resolved_attribute_name) = parseDottedRef(raw)
+    for name in names_for(element, default_name, binding.selector):
+      if result.hasKey(name):
+        result[name].add(element)
+      else:
+        result[name] = @[element]
 
-  elif array_match != (-1,0):
-    let raw = filename[array_match[0]+1 .. array_match[1]-1]
-    (root_collection_name, resolved_attribute_name) = parseDottedRef(raw)
+proc join_path(prefix, addition: string): string =
+  if prefix.len > 0: prefix & "/" & addition
+  else: addition
 
-  elif key_match != (-1,0):
-    let raw = filename[key_match[0]+1 .. key_match[1]-1]
-    (root_collection_name, resolved_attribute_name) = parseDottedRef(raw)
+proc calculate_render_state_items_for*(
+  context: JsonNode,
+  source_path: string
+): seq[RenderStateItem] =
+  result = @[]
 
-  # If dotted notation was used, resolve collection from root context
-  if root_collection_name.len > 0:
-    if context{root_collection_name} != nil:
-      local_context = context{root_collection_name}
-    else:
-      warn "Skipping Root collection '", root_collection_name, "' doesn't exist in context."
-      return
-  else:
-    # Standard traversal: follow the directory path through context.
-    # A source_path of "shop/products/{slug}.mustache" will traverse the context
-    # to "shop.products" and then render the template for each value in the
-    # "shop.products" array/object.
-    for token in context_path:
-      local_context = local_context{token}
-      if local_context == nil:
-        warn "Skipping The path '", context_path.join("."), "' doesn't exist."
-        return
+  let template_path = parse_path_template(source_path)
 
-  let
-    effective_source_path = if original_source_path.len > 0: original_source_path else: source_path
-    template_render_state_item = init_render_state_item(
-      source_path = effective_source_path,
-      output_path = output_path,
-      render = true,
-      item = ( if local_context.kind == JObject and local_context.has_key( filename ): local_context{filename} else: local_context),
-      items = newJArray()
+  if template_path.segments.len == 0:
+    return
+
+  var frontier = @[(
+    "",
+    Frame(
+      scope: context,
+      elements: @[],
+      bound: nil,
+      bound_parent: nil,
+      key: ""
     )
+  )]
 
-  if key_match != (-1,0):
-    # We have a key replacement template.
-    # The filename part of the path will be replaced with the key/index for
-    # each value in the array/object.
-    return local_context.render_key_match( template_render_state_item )
+  for index, segment in template_path.segments:
+    let is_last = index == template_path.segments.high
+    var next: seq[(string, Frame)] = @[]
 
-  elif attribute_match != (-1,0):
-    # We have an attribute match. The filename part of the path will be
-    # replaced with the value of the named attribute for each value in the
-    # array/object.
-    let
-      attribute_name = if resolved_attribute_name.len > 0: resolved_attribute_name
-                       else: filename[attribute_match[0]+1 .. attribute_match[1]-1]
+    for (path_so_far, frame) in frontier:
 
-    return local_context.render_attribute_match( attribute_name, template_render_state_item )
+      if segment.binding.isNone:
+        let joined = join_path(path_so_far, segment.prefix)
 
-  elif array_match != (-1,0):
-    # We have an array match. The filename part of the path will be replaced
-    # with the value of the named attribute for each unique value in that
-    # attribute, collected from each value in the array/object.
-    let
-      attribute_name = if resolved_attribute_name.len > 0: resolved_attribute_name
-                       else: filename[array_match[0]+1 .. array_match[1]-1]
+        if is_last:
+          result.add(init_render_state_item(
+            source_path = source_path,
+            output_path = joined & ".html",
+            render = true,
+            item = frame.scope,
+            items = if frame.elements.len > 0: %frame.elements else: newJArray(),
+            key = frame.key,
+            parent = frame.bound_parent
+          ))
+        else:
+          next.add((joined, frame))
 
-    return local_context.render_array_match( attribute_name, template_render_state_item )
+        continue
 
-  else:
-    # No key replacement template, no attribute match, no array match.
-    # This is a single page template, just replace the extension and render.
-    result.add( template_render_state_item.init_render_state_item(
-      output_path = output_path / filename.strip() & ".html",
-      item = template_render_state_item.item,
-      items = template_render_state_item.items
-    ) )
+      let
+        binding = segment.binding.get()
+        source = source_for(context, frame, binding)
 
-# Router behaviour is specified by test/path_router_spec.nim.
+      if source.isNil or (source.kind != JObject and source.kind != JArray):
+        warn "Skipping '", source_path, "': no collection '",
+          binding.collection.join("."), "' to expand."
+        continue
+
+      for name, elements in group_elements(frame, binding, source, source_path):
+        let
+          joined = join_path(path_so_far, segment.prefix & name & segment.suffix)
+          single = elements.len == 1
+
+        if is_last:
+          result.add(init_render_state_item(
+            source_path = source_path,
+            output_path = joined & ".html",
+            render = true,
+            item = if single: elements[0] else: newJNull(),
+            items = %elements,
+            key = name,
+            parent = frame.bound
+          ))
+        else:
+          var bound: JsonNode = nil
+
+          if single:
+            bound = elements[0].copy()
+            if not frame.bound.isNil:
+              bound["parent"] = frame.bound
+
+          next.add((joined, Frame(
+            scope: if single: elements[0] else: %elements,
+            elements: elements,
+            bound: bound,
+            bound_parent: frame.bound,
+            key: name
+          )))
+
+    frontier = next
