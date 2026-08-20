@@ -76,9 +76,72 @@ proc filter*( file_list: HashSet[ string ], globs: seq[ Glob ], blacklist: seq[ 
 
 
 
-# Returns a list of unique, relative paths to all files in the source directory
-# that match any step's glob and is not in the blacklist.
-proc init_file_list*( cfg: Config, steps: seq[ Step ] ): seq[ string ] =
+# Collects the directories holding partials, as declared by the steps that use
+# them. A partial is an input to another template rather than a page of its own,
+# so it is kept out of the candidate source files.
+proc init_partial_globs*( cfg: Config ): seq[ Glob ] =
+  result = @[]
+
+  for workflow in cfg.workflows:
+    for step in workflow.steps:
+      if step.extraConfig == nil or not step.extraConfig.hasKey( "partial_directories" ):
+        continue
+
+      for directory_node in step.extraConfig[ "partial_directories" ]:
+        let directory = cfg.directories.root / directory_node.getStr
+
+        if not directory.starts_with( cfg.directories.src ):
+          continue
+
+        let relative_path = relativePath( directory, cfg.directories.src )
+
+        if relative_path != ".":
+          debug "Adding " & relative_path & "/* to the partial directories"
+          result.add( glob( relative_path & "/**/*" ))
+
+
+
+# True when a source relative path sits inside a declared partial directory.
+proc is_partial*( cfg: Config, file_path: string ): bool =
+  cfg.init_partial_globs().any_it( file_path.matches( it ))
+
+
+
+# Every file in the source directory that a build could care about: the whole
+# tree, less the blacklist and less any declared partial directory.
+#
+# This is what a full build passes as its candidate list. Callers wanting a
+# narrower build - a dev rebuild, a diff driven rebuild - pass their own list
+# instead of calling this.
+proc init_source_files*( cfg: Config ): seq[ string ] =
+  let
+    blacklist = init_blacklist(
+      cfg.directories.src,
+      cfg.directories.destination,
+      cfg.directories.config
+    )
+    partial_globs = init_partial_globs( cfg )
+    raw_file_list = init_raw_file_list(
+      cfg.directories.src
+    )
+
+  result = @[]
+
+  for file_path in raw_file_list:
+    if blacklist.any_it( file_path.matches( it )):
+      continue
+
+    if partial_globs.any_it( file_path.matches( it )):
+      continue
+
+    result.add( file_path )
+
+
+
+# Narrows the caller's candidate files to those this workflow's steps ask for.
+# The blacklist is applied again here so a caller supplied list cannot smuggle
+# in the build or config directories.
+proc init_file_list*( cfg: Config, steps: seq[ Step ], source_files: seq[ string ] ): seq[ string ] =
   let
     globs = init_step_globs( steps )
     blacklist = init_blacklist(
@@ -86,11 +149,17 @@ proc init_file_list*( cfg: Config, steps: seq[ Step ] ): seq[ string ] =
       cfg.directories.destination,
       cfg.directories.config
     )
-    raw_file_list = init_raw_file_list(
-      cfg.directories.src
-    )
 
-  result = raw_file_list.filter( globs, blacklist )
+  result = @[]
+
+  for file_path in source_files:
+    if not globs.any_it( file_path.matches( it )):
+      continue
+
+    if blacklist.any_it( file_path.matches( it )):
+      continue
+
+    result.add( file_path )
 
   warn "[FILTERED FILE LIST]", $result
 

@@ -14,6 +14,7 @@ var state* = State(
   config: Config(),
   context: newJObject(),
   render_state: @[],
+  source_files: @[],
   current_step: Step(),
   current_workflow: Workflow()
 )

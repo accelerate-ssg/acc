@@ -4,6 +4,7 @@ import global_state
 import logger
 import build
 import fswatch
+import types/render_state/file_list
 
 import dev_server/mime_types
 
@@ -172,7 +173,24 @@ proc file_change_callback(event: Event) {.gcsafe.} =
       build_running = true
       debug "Change detected: ", event.path
 
-      build( state )
+      let
+        source_root = absolutePath( state.config.directories.src )
+        changed_path = absolutePath( event.path )
+        relative_path = relativePath( changed_path, source_root )
+
+      # A file outside the source tree, or one that other templates include,
+      # can affect any page. Until there is a dependency graph to consult,
+      # those rebuild everything; anything else rebuilds only itself.
+      if relative_path.starts_with( ".." ):
+        debug "Changed file is outside the source directory, rebuilding everything"
+        build( state )
+      elif state.config.is_partial( relative_path ):
+        debug "A partial changed, rebuilding everything: ", relative_path
+        build( state )
+      else:
+        debug "Rebuilding only: ", relative_path
+        build( state, @[ relative_path ] )
+
       reload_flag.store(true)
       build_running = false
 

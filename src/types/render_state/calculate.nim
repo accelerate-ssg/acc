@@ -8,9 +8,9 @@ import types/render_state
 import file_list
 import file_router
 
-proc calculate_render_state*( cfg: Config, steps: seq[Step], context: JsonNode ): RenderState =
+proc calculate_render_state*( cfg: Config, steps: seq[Step], context: JsonNode, source_files: seq[string] ): RenderState =
   let
-    file_list = init_file_list( cfg, steps )
+    file_list = init_file_list( cfg, steps, source_files )
 
   result = @[]
 

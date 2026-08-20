@@ -3,8 +3,13 @@ import os
 import logger
 import global_state
 import action/run_workflow
+import types/render_state/file_list
 
-proc build*( state: State ) =
+proc build*( state: State, source_files: seq[string] ) =
+  ## Builds exactly the files the caller names. Each workflow still narrows this
+  ## list by its own step globs, so a step only ever sees what it asked for.
+  state.source_files = source_files
+
   let
     build_dir = state.config.directories.build
     dest_dir = state.config.directories.destination
@@ -36,3 +41,7 @@ proc build*( state: State ) =
       warn "No workflows defined in config"
 
   set_current_dir( current_directory )
+
+proc build*( state: State ) =
+  ## A full build: every source file, less the blacklist and the partials.
+  state.build( init_source_files( state.config ))

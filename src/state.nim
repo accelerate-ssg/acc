@@ -12,5 +12,11 @@ type
     context*: JsonNode
     config*: Config
     render_state*: RenderState
+    ## Candidate source files for this build, relative to the source directory.
+    ## The caller decides what goes in here: a full build passes everything, a
+    ## dev rebuild passes only what changed, and a caching layer or a git diff
+    ## can later pass whatever it considers stale. Each workflow still narrows
+    ## this list by its own step globs.
+    source_files*: seq[string]
     current_step*: Step
     current_workflow*: Workflow

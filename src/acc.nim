@@ -25,7 +25,7 @@ proc showMe(aspect: string) =
         steps = wf.steps
         break
     if steps.len > 0:
-      let files = init_file_list(state.config, steps)
+      let files = init_file_list(state.config, steps, init_source_files(state.config))
       echo pretty(%*files)
     else:
       echo "[]"

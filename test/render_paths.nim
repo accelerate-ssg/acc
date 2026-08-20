@@ -173,3 +173,124 @@ suite "File list - filter":
       blacklist: seq[Glob] = @[]
       result = filter(files, globs, blacklist)
     check result.len == 0
+
+
+# ============================================================================
+# Caller supplied source files
+#
+# The candidate file list is an input, not something the router discovers. A
+# full build passes everything; a dev rebuild passes only what changed; a diff
+# driven rebuild will pass whatever it considers stale. Each workflow still
+# narrows that list by its own step globs.
+# ============================================================================
+
+suite "File list - caller supplied candidates":
+
+  setup:
+    let cfg = Config(
+      directories: Directories(
+        root: "/site",
+        src: "/site/src",
+        destination: "/site/public",
+        config: "/site/.acc"
+      )
+    )
+
+    proc render_steps(): seq[Step] =
+      var step = Step()
+      step.extraConfig = %* { "glob": "**/*.mustache" }
+      @[step]
+
+  test "the workflow narrows the caller's list by its step globs":
+    let
+      candidates = @["index.mustache", "style.css", "about.mustache"]
+      result = init_file_list(cfg, render_steps(), candidates)
+
+    check result.len == 2
+    check "index.mustache" in result
+    check "about.mustache" in result
+    check "style.css" notin result
+
+  test "a single changed file is a valid candidate list":
+    let result = init_file_list(cfg, render_steps(), @["about.mustache"])
+
+    check result == @["about.mustache"]
+
+  test "a changed file the steps do not want yields nothing to render":
+    let result = init_file_list(cfg, render_steps(), @["notes.txt"])
+
+    check result.len == 0
+
+  test "an empty candidate list renders nothing":
+    let candidates: seq[string] = @[]
+
+    check init_file_list(cfg, render_steps(), candidates).len == 0
+
+  test "the blacklist still applies to a caller supplied list":
+    # A caller must not be able to smuggle the destination directory back in.
+    # The blacklist only covers directories that exist, so these are real.
+    let
+      temp_dir = getTempDir() / "accelerate_candidates_test"
+      source_dir = temp_dir / "src"
+      nested_destination = source_dir / "public"
+
+    createDir(nested_destination)
+
+    let
+      real_cfg = Config(
+        directories: Directories(
+          root: temp_dir,
+          src: source_dir,
+          destination: nested_destination,
+          config: temp_dir / ".acc"
+        )
+      )
+      candidates = @["index.mustache", "public/stale.mustache"]
+      result = init_file_list(real_cfg, render_steps(), candidates)
+
+    check "index.mustache" in result
+    check "public/stale.mustache" notin result
+
+    removeDir(temp_dir)
+
+
+suite "File list - partial directories":
+
+  setup:
+    var partial_step = Step()
+    partial_step.extraConfig = %* {
+      "glob": "**/*.liquid",
+      "partial_directories": [ "src/partials" ]
+    }
+
+    let cfg = Config(
+      directories: Directories(
+        root: "/site",
+        src: "/site/src",
+        destination: "/site/public",
+        config: "/site/.acc"
+      ),
+      workflows: @[
+        Workflow( name: "render", steps: @[ partial_step ] )
+      ]
+    )
+
+  test "a declared partial directory becomes an exclusion glob":
+    check cfg.init_partial_globs().len == 1
+
+  test "files inside a partial directory are recognised as partials":
+    check cfg.is_partial("partials/head.liquid")
+    check cfg.is_partial("partials/nested/menu.liquid")
+
+  test "ordinary pages are not partials":
+    check not cfg.is_partial("index.liquid")
+    check not cfg.is_partial("blog/post.liquid")
+
+  test "a config declaring no partial directories has no exclusions":
+    let bare = Config(
+      directories: Directories(root: "/site", src: "/site/src"),
+      workflows: @[]
+    )
+
+    check bare.init_partial_globs().len == 0
+    check not bare.is_partial("partials/head.liquid")
