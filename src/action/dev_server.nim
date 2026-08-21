@@ -184,7 +184,21 @@ proc process_request( request: Request, root_dir: string, source_root: string ) 
     headers["content-type"] = mime_type & "; charset=utf-8"
     
     if ext == ".html" or ext == ".htm":
-      content = "<script>" & reload_script & "</script>" & content
+      # Inject the live reload script after the doctype, never before it: a
+      # start tag while the parser is in its initial insertion mode drops the
+      # document into quirks mode and the doctype is then ignored, which
+      # changes how line boxes around inline images are measured. The parser
+      # implies <html> and <head> around the script either way, so it still
+      # ends up as the first child of <head>, same as before.
+      let
+        script = "<script>" & reload_script & "</script>"
+        doctype_start = content[0 ..< min(content.len, 200)].to_lower().find("<!doctype")
+        doctype_end = if doctype_start >= 0: content.find('>', doctype_start) else: -1
+
+      if doctype_end >= 0:
+        content = content[0 .. doctype_end] & script & content[doctype_end + 1 .. ^1]
+      else: # No doctype, so the document is in quirks mode regardless
+        content = script & content
   else: # 404 not found
     let
       file_tree = html_tree_from_dir(root_dir)
