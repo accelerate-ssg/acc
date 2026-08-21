@@ -126,9 +126,11 @@ one.
 If Accelerate can't find fswatch (`could not load: libfswatch.dylib`),
 start by verifying that fswatch is actually installed, then find the path
 to the library, for instance by using `brew info fswatch`. Then set that path as following to your `.zshrc`
-or similar (where `/usr/local/lib` is the actual path to the library):
+or similar (`brew --prefix` resolves to `/opt/homebrew` on Apple Silicon and
+`/usr/local` on Intel — replace it with the actual path if the library lives
+elsewhere):
 ```sh
-export DYLD_LIBRARY_PATH="/usr/local/lib"
+export DYLD_LIBRARY_PATH="$(brew --prefix)/lib"
 ```
 
 ## Development
