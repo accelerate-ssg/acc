@@ -163,7 +163,7 @@ proc runWorkflow*(state: State, workflow: Workflow, depth: int = 0) =
 
   elif workflow.isLeaf:
     # Calculate render state for this workflow's steps
-    state.render_state = calculate_render_state(state.config, workflow.steps, state.context.toJson, state.source_files)
+    state.render_state = calculate_render_state(state.config, workflow.steps, state.context, state.source_files)
 
     # Run steps
     for step in workflow.steps:
