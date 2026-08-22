@@ -1,4 +1,5 @@
 import json
+import std/[times, options, os]
 
 import global_state
 import logger
@@ -58,18 +59,38 @@ proc main() =
   case state.config.action:
   of ActionDev: state.dev_server()
   of ActionBuild:
+    let stamp = getTime()
+
+    # Opt-in persistence: pick up where the last build left off, so the
+    # loader merges instead of rebuilding, the access log describes the
+    # previous build from the first edit, and mtime has a baseline.
+    var cached_stamp = none(Time)
+    if state.config.useCache:
+      let cache_file = state.config.directories.work / "context.cache"
+      let loaded = loadCache(cache_file)
+      if loaded.isSome:
+        state.context = loaded.get.store
+        cached_stamp = some(loaded.get.stamp)
+        registerContentLoaders()
+        notice "Continuing from the cached context of the previous build."
+
     case state.config.changeStrategy
     of "", "full":
       state.build()
     of "git":
       state.build(gitChangeSet(state.config, state.config.changeSince))
     of "mtime":
-      error "--using=mtime needs a cached previous build, which is not available yet."
-      quit(1)
+      if cached_stamp.isNone:
+        error "--using=mtime compares against a cached build: run with --cache, twice."
+        quit(1)
+      state.build(mtimeChangeSet(state.config, cached_stamp.get))
     else:
       error "Unknown change strategy: ", state.config.changeStrategy,
-        " (expected full or git)"
+        " (expected full, git or mtime)"
       quit(1)
+
+    if state.config.useCache:
+      state.context.saveCache(state.config.directories.work / "context.cache", stamp)
   of ActionTest: state.test()
   of ActionClean: state.clean()
   of ActionRun: state.run()

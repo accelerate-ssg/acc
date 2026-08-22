@@ -6,7 +6,7 @@
 ## as reference oracles. Every test drives the oracle and the ContextStore
 ## with the same operations and requires identical resulting trees.
 
-import std/[unittest, json, strutils, sets]
+import std/[unittest, json, strutils, sets, os, times, options]
 import re
 
 import types/context_store
@@ -484,3 +484,71 @@ suite "ContextStore - mergePath":
     let store = newContextStore()
     store.mergePath(["brand", "new"], %*{"v": 1})
     check store.getPath(["brand", "new", "v"]) == %1
+
+suite "ContextStore - Cache":
+  let cache_file = getTempDir() / "acc_context_cache_test" / "context.cache"
+
+  proc freshCachePath(): string =
+    removeDir(cache_file.parentDir)
+    cache_file
+
+  test "a saved context loads back intact":
+    let path = freshCachePath()
+    let store = newContextStore()
+    store.mergePath(["site"], %*{"name": "Cached"})
+    discard store.consumer("@page index.html")
+    let stamp = fromUnix(1_700_000_000)
+    store.saveCache(path, stamp)
+
+    let loaded = loadCache(path)
+    check loaded.isSome
+    check loaded.get.stamp == stamp
+    check loaded.get.store.getPath(["site", "name"]) == %"Cached"
+    # Consumer identities survive: same label, same id.
+    check loaded.get.store.consumer("@page index.html") ==
+      store.consumer("@page index.html")
+    check loaded.get.store.known_consumer("@page index.html")
+
+  test "a cold process answers invalidation from the previous run":
+    let path = freshCachePath()
+    # Previous run: load content, render a page, save.
+    block previous_run:
+      let store = newContextStore()
+      discard store.track("@load posts.yaml")
+      store.mergePath(["posts"], %*[
+        {"slug": "first", "title": "One"},
+        {"slug": "second", "title": "Two"},
+      ])
+      store.untrack()
+      discard store.track("@page first.html")
+      let posts = store.lookupPath(["posts"])
+      discard store.arena.getStr(
+        store.arena.objGet(store.arena.arrGet(posts, 0), "title"))
+      store.untrack()
+      discard store.track("@page second.html")
+      discard store.arena.getStr(
+        store.arena.objGet(store.arena.arrGet(posts, 1), "title"))
+      store.untrack()
+      store.saveCache(path, getTime())
+
+    # Cold process: load the cache, reload the file with ONE change.
+    let store = loadCache(path).get.store
+    discard store.track("@load posts.yaml")
+    store.mergePath(["posts"], %*[
+      {"slug": "first", "title": "Renamed"},
+      {"slug": "second", "title": "Two"},
+    ])
+    store.untrack()
+
+    let stale = store.arena.invalidatedBy(store.consumer("@load posts.yaml"))
+    check store.consumer("@page first.html") in stale
+    check store.consumer("@page second.html") notin stale
+
+  test "a missing cache is none":
+    check loadCache(freshCachePath()).isNone
+
+  test "a corrupt cache is ignored":
+    let path = freshCachePath()
+    createDir(path.parentDir)
+    writeFile(path, "not a cache at all")
+    check loadCache(path).isNone

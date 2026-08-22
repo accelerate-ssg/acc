@@ -19,7 +19,7 @@
 ## Reads mirror the State-level `{}`: plain keys only, any miss or null
 ## yields JNull. Reads return materialized copies, never live views.
 
-import std/[json, strutils, tables]
+import std/[json, strutils, tables, streams, times, os, options]
 import re
 
 import logger
@@ -271,6 +271,61 @@ proc applyScriptChanges*(ctx: ContextStore, j: JsonNode) =
 
 proc `$`*(ctx: ContextStore): string =
   $ctx.toJson
+
+# ─── Cache ───────────────────────────────────────────────────────────
+
+const ContextCacheMagic = 0x41434343'u32  # "ACCC"
+const ContextCacheVersion = 1'u32
+
+proc saveCache*(ctx: ContextStore, path: string, stamp: Time) =
+  ## Persist the context — tree, origins, access log, consumer labels —
+  ## with the build stamp mtime-based change detection compares against.
+  createDir(path.parentDir)
+  let s = newFileStream(path, fmWrite)
+  defer: s.close()
+  s.write(ContextCacheMagic)
+  s.write(ContextCacheVersion)
+  s.write(int64(stamp.toUnix))
+  s.write(uint32(ctx.root))
+  s.write(uint32(ctx.consumer_names.len))
+  for name in ctx.consumer_names:
+    s.write(uint32(name.len))
+    if name.len > 0:
+      s.writeData(unsafeAddr name[0], name.len)
+  ctx.arena.saveArena(s)
+
+proc loadCache*(path: string): Option[tuple[store: ContextStore, stamp: Time]] =
+  ## Load a persisted context. A missing, corrupt or version-mismatched
+  ## cache is reported and ignored — the cache is always regenerable.
+  if not path.fileExists:
+    return
+  try:
+    let s = newFileStream(path, fmRead)
+    defer: s.close()
+    if s.readUint32() != ContextCacheMagic:
+      warn "Ignoring context cache with unknown format: ", path
+      return
+    let version = s.readUint32()
+    if version != ContextCacheVersion:
+      warn "Ignoring context cache from format version ", $version
+      return
+    let stamp = fromUnix(s.readInt64())
+    let root = NodeId(s.readUint32())
+    var names: seq[string] = @[]
+    for i in 0 ..< int(s.readUint32()):
+      let len = int(s.readUint32())
+      var name = newString(len)
+      if len > 0:
+        if s.readData(addr name[0], len) != len:
+          warn "Ignoring truncated context cache: ", path
+          return
+      names.add(name)
+    let store = ContextStore(arena: loadArena(s), root: root)
+    for name in names:
+      discard store.consumer(name)
+    result = some((store, stamp))
+  except CatchableError as e:
+    warn "Ignoring unreadable context cache: ", e.msg
 
 proc `{}=`*(ctx: ContextStore, keys: varargs[string], value: JsonNode) =
   ## Same call shape yaml_loader used when the context was a JsonNode,

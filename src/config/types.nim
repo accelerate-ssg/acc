@@ -48,6 +48,8 @@ type
     changeStrategy*: string
     ## Baseline git ref for changeStrategy "git".
     changeSince*: string
+    ## Load the persisted context before building and save it after.
+    useCache*: bool
     directories*: Directories
     workflows*: seq[Workflow]
     genericConfig*: JsonNode
