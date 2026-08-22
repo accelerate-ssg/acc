@@ -25,6 +25,9 @@ Build/Dev options:
   -d, --destination DIR  Destination directory override
   -w, --work DIR         Work directory override
   -b, --build DIR        Build directory override
+  -u, --using STRATEGY   How to find what changed: full, git
+                         [default: full]
+  --since REF            Baseline ref for --using=git [default: HEAD]
 
 Options:
   -l, --log LEVEL        Log level: all, debug, info, warning, error,
@@ -86,6 +89,10 @@ proc parseCliArgs*(): Config =
       result.action = ActionRun
       result.runWorkflow = $args["<workflow>"]
     elif args["clean"]: result.action = ActionClean
+
+  # Change detection strategy
+  result.changeStrategy = if args["--using"]: $args["--using"] else: "full"
+  result.changeSince = if args["--since"]: $args["--since"] else: "HEAD"
 
   # Apply CLI directory overrides
   if args["--src"]:

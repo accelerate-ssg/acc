@@ -3,6 +3,7 @@ import json
 import global_state
 import logger
 import config
+import change_set
 import action/[build,test,clean,run,dev_server,init,run_workflow]
 import action/internal_functions/yaml_loader
 import types/render_state/file_list
@@ -56,7 +57,19 @@ proc main() =
 
   case state.config.action:
   of ActionDev: state.dev_server()
-  of ActionBuild: state.build()
+  of ActionBuild:
+    case state.config.changeStrategy
+    of "", "full":
+      state.build()
+    of "git":
+      state.build(gitChangeSet(state.config, state.config.changeSince))
+    of "mtime":
+      error "--using=mtime needs a cached previous build, which is not available yet."
+      quit(1)
+    else:
+      error "Unknown change strategy: ", state.config.changeStrategy,
+        " (expected full or git)"
+      quit(1)
   of ActionTest: state.test()
   of ActionClean: state.clean()
   of ActionRun: state.run()

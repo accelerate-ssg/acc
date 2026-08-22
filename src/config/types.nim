@@ -43,6 +43,11 @@ type
     logLevel*: LogLevel
     runWorkflow*: string
     showMe*: string
+    ## How `acc build` finds out what changed: "full" (default), "git",
+    ## or "mtime" once persisted state carries a baseline.
+    changeStrategy*: string
+    ## Baseline git ref for changeStrategy "git".
+    changeSince*: string
     directories*: Directories
     workflows*: seq[Workflow]
     genericConfig*: JsonNode

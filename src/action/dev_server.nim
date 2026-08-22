@@ -19,6 +19,7 @@ import std/[sets, algorithm]
 import global_state
 import logger
 import build
+import change_set
 import fswatch
 import arena_context_store
 import types/render_state/file_list
@@ -180,36 +181,18 @@ proc report_shadow_invalidation(changed_path: string) {.gcsafe.} =
       notice "[shadow] ", changed_path.extract_filename,
         " would invalidate ", $labels.len, " consumer(s): ", labels.join( ", " )
 
-proc rebuild(changed: seq[string]) {.gcsafe.} =
-  ## Rebuild for a batch of changed files, then tell the tabs. A file
-  ## outside the source tree, or one that other templates include, can
-  ## affect any page: those rebuild everything, anything else rebuilds
-  ## only itself.
+proc rebuild(changes: ChangeSet) {.gcsafe.} =
+  ## Rebuild for a batch of watcher events, then tell the tabs. The
+  ## change set goes through the same classifier CLI builds use.
   {.cast(gcsafe).}:
     let old_parsing_context = get_parsing_context()
     set_parsing_context("rebuild")
 
     try:
-      let source_root = absolutePath( state.config.directories.src )
-      var
-        rebuild_all = false
-        relative_paths: seq[string] = @[]
-
-      for changed_path in changed:
+      for changed_path in changes.changed:
         report_shadow_invalidation(changed_path)
-        let relative_path = relativePath( changed_path, source_root )
-        if relative_path.starts_with( ".." ) or state.config.is_partial( relative_path ):
-          rebuild_all = true
-        else:
-          relative_paths.add( relative_path )
 
-      if rebuild_all:
-        debug "Rebuilding everything"
-        build( state )
-      else:
-        debug "Rebuilding only: ", relative_paths.join( ", " )
-        build( state, relative_paths )
-
+      build( state, changes )
       broadcast_reload()
 
     except CatchableError as e:
@@ -229,18 +212,25 @@ proc watch_for_changes(channel: ptr Channel[Event]) {.async.} =
       await sleepAsync(50)
       continue
 
-    var changed = initOrderedSet[string]()
-    changed.incl(absolutePath(first.path))
-
+    var events = @[first]
     await sleepAsync(30)
     while true:
       let (more, event) = channel[].tryRecv()
       if not more:
         break
-      changed.incl(absolutePath(event.path))
+      events.add(event)
 
-    debug "Change detected: ", changed.toSeq.join(", ")
-    rebuild(changed.toSeq)
+    var
+      changed = initOrderedSet[string]()
+      removed = initOrderedSet[string]()
+    for event in events:
+      if event.kind == etDelete:
+        removed.incl(absolutePath(event.path))
+      else:
+        changed.incl(absolutePath(event.path))
+
+    debug "Change detected: ", (changed.toSeq & removed.toSeq).join(", ")
+    rebuild(ChangeSet(changed: changed.toSeq, removed: removed.toSeq))
 
 proc dev_server*( state: State ) =
   var server = new_async_http_server()
