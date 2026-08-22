@@ -8,8 +8,6 @@ import config
 import arena_context_store
 import action/internal_functions/[step_helpers, key_stack]
 
-var stack = newKeyStack()
-
 proc yamlLoad*(arena: var Arena, data: string, path: string): NodeId =
   ## Arena LoadProc for YAML content. NimYAML parses a superset of JSON,
   ## so this also serves .json files matched by @yaml step globs, exactly
@@ -34,7 +32,7 @@ proc registerContentLoaders*() =
   ## step. YAML handles .json too — see yamlLoad.
   state.context.arena.registerLoader("yaml", @[".yml", ".yaml", ".json"], yamlLoad)
 
-proc parse(absolute_path: string, relative_path: string) =
+proc parse(stack: var KeyStack, absolute_path: string, relative_path: string) =
   stack.mark()
   stack.add_file_path(relative_path)
   # One consumer per file: its write set is what a change to this file
@@ -69,9 +67,14 @@ proc run*(step: Step) =
     glob = step.glob(content_dir / "**/*.{yml,yaml}")
     context_path_prefix = step.context_path_prefix("")
 
+  # The stack is local to this run, so a configured prefix lives exactly
+  # as long as the run — a second build in the same process (dev server
+  # rebuilds) starts from a fresh stack instead of stacking the prefix
+  # twice.
+  var stack = newKeyStack()
   stack.add_dotted_path(context_path_prefix)
 
   for file in walk_dir_rec(content_dir, relative = true):
     if file.matches(glob):
       notice "Parsing: ", file
-      parse(content_dir / file, file)
+      stack.parse(content_dir / file, file)

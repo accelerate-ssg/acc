@@ -3,7 +3,7 @@ import std/[os, strutils]
 import global_state
 
 type
-  KeyStack = object
+  KeyStack* = object
     atoms*: seq[string]
     marks: seq[int]
 

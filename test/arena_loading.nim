@@ -2,8 +2,10 @@
 ## LoadProc, origin tagging, NodeId binding, and origin chaining when
 ## the markdown step rewrites loaded leaves.
 
-import std/[unittest, json]
+import std/[unittest, json, os]
 
+import global_state
+import config
 import types/context_store
 import action/internal_functions/yaml_loader
 import arena_context_store
@@ -102,3 +104,40 @@ suite "Arena loading - origin chaining":
     let leaf = ctx.arena.objGet(ctx.root, "fresh")
     check ctx.arena.originHistory(leaf).len == 1
     check ctx.arena.getOrigin(ctx.arena.getNodeOrigin(leaf)).format == sfComputed
+
+suite "Arena loading - yaml_loader run":
+  # run() operates on the global state: point it at a temp content dir.
+  proc setupSite(): Step =
+    let content_dir = getTempDir() / "acc_yaml_loader_regression" / "content"
+    removeDir(content_dir.parentDir)
+    createDir(content_dir)
+    writeFile(content_dir / "index.yaml", "title: Home\n")
+    writeFile(content_dir / "about.yaml", "title: About\n")
+    state.config.directories.content = content_dir
+    state.context = newContextStore()
+    Step(extraConfig: %*{
+      "context_path_prefix": "pages",
+      "glob": "**/*.{yml,yaml}",
+    })
+
+  test "content loads under the configured prefix":
+    let step = setupSite()
+    yaml_loader.run(step)
+    check state.context.getPath(["pages", "index", "title"]) == %"Home"
+    check state.context.getPath(["pages", "about", "title"]) == %"About"
+
+  test "a second run does not stack the prefix":
+    let step = setupSite()
+    yaml_loader.run(step)
+    yaml_loader.run(step)
+    # The regression doubled the prefix: pages.pages.index. A rerun must
+    # land in the same place as the first.
+    check state.context.getPath(["pages", "index", "title"]) == %"Home"
+    check state.context.getPath(["pages", "pages"]) == newJNull()
+
+  test "runs without a prefix stay at the top level":
+    let step = setupSite()
+    step.extraConfig.delete("context_path_prefix")
+    yaml_loader.run(step)
+    yaml_loader.run(step)
+    check state.context.getPath(["index", "title"]) == %"Home"
