@@ -44,18 +44,26 @@ proc lenLike(ctx: ContextStore, id: NodeId): int =
   of nkArray: ctx.arena.arrLen(id)
   else: 0
 
+proc bindPath*(ctx: ContextStore, keys: openArray[string], node: NodeId) =
+  ## Bind an already-built arena subtree at a plain key path. Same
+  ## traversal as std/json's `{}=`: plain keys, missing intermediates
+  ## become objects, the last key is bound. Intermediates created here are
+  ## deliberately untagged — they are shared structure, not content of
+  ## whichever file happens to vivify them first.
+  assert keys.len > 0, "bindPath needs at least one key"
+  var target = ctx.root
+  for i in 0 .. keys.len - 2:
+    var child = ctx.arena.objGet(target, keys[i])
+    if child == InvalidNodeId:
+      child = ctx.arena.newObj()
+      ctx.arena.objSet(target, keys[i], child)
+    target = child
+  ctx.arena.objSet(target, keys[^1], node)
+
 proc setPlainPath*(ctx: ContextStore, keys: openArray[string], value: JsonNode) =
   ## Port of std/json's `{}=`: plain keys, missing intermediates become
   ## objects, the last key is assigned.
-  assert keys.len > 0, "setPlainPath needs at least one key"
-  var node = ctx.root
-  for i in 0 .. keys.len - 2:
-    var child = ctx.arena.objGet(node, keys[i])
-    if child == InvalidNodeId:
-      child = ctx.arena.newObj()
-      ctx.arena.objSet(node, keys[i], child)
-    node = child
-  ctx.arena.objSet(node, keys[^1], ctx.arena.fromJson(value))
+  ctx.bindPath(keys, ctx.arena.fromJson(value))
 
 proc setAccPath*(ctx: ContextStore, keys: openArray[string], value: JsonNode) =
   ## Faithful port of the State-level `{}=` from global_state, including

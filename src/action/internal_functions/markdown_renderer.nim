@@ -3,6 +3,7 @@ import global_state
 import config
 import logger
 import markdown
+import arena_context_store
 
 proc getExtraConfigStr(key: string, default: string): string =
   let step = state.current_step
@@ -60,8 +61,17 @@ proc run*(step: Step) =
   # Walk a snapshot: writes through state{path} replace nodes in the
   # arena, and the walk keeps visiting the pre-write values, exactly as
   # the live-tree walk did (replaced nodes were never revisited).
-  state.context.toJson.for_each_matching_member(
-    proc (path, content: string) =
-      let html = markdown(content)
-      state{path} = newJString(html)
-  )
+  #
+  # The rewrites carry a computed origin. Rebinding a leaf that already
+  # has one chains the origins, so a rendered node's history walks back
+  # to the content file it was loaded from.
+  let origin = state.context.arena.registerOrigin(sfComputed, "@markdown")
+  state.context.arena.pushOrigin(origin)
+  try:
+    state.context.toJson.for_each_matching_member(
+      proc (path, content: string) =
+        let html = markdown(content)
+        state{path} = newJString(html)
+    )
+  finally:
+    state.context.arena.popOrigin()

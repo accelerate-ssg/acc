@@ -4,6 +4,7 @@ import global_state
 import logger
 import config
 import action/[build,test,clean,run,dev_server,init,run_workflow]
+import action/internal_functions/yaml_loader
 import types/render_state/file_list
 import plugins/registry
 import plugins/mustache_engine
@@ -44,6 +45,9 @@ proc main() =
   # Register built-in template engines
   registerEngine("mustache", mustache_engine.plugin)
   registerEngine("liquid", acc_liquid.plugin)
+
+  # Register content loaders on the context's arena
+  registerContentLoaders()
 
   if state.config.showMe != "":
     showMe(state.config.showMe)

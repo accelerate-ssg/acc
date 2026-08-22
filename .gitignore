@@ -38,6 +38,7 @@ src/**
 test/render_paths
 test/test_cli
 test/context_store
+test/arena_loading
 
 # Atlas-vendored dependency checkouts (own git repos)
 /ws
