@@ -15,7 +15,7 @@ proc render(context: Context, path: string): string =
 proc run*(step: Step) =
   var context = new_context(
     searchDirs = step.search_dirs(),
-    values = state.context.toValues()
+    values = state.context.toJson.toValues()
   )
 
   let

@@ -100,7 +100,11 @@ proc runScriptStep(step: Step, state: State) =
       let scriptContent = readFile(resolvedPath)
       try:
         scriptRunner.create()
-        let contextPtr = cast[pointer](state.context)
+        # Scripts receive a materialized JsonNode snapshot of the context.
+        # Mutations through this pointer are no longer visible to the build;
+        # script write-back returns when the runner speaks the arena's API.
+        let contextJson = state.context.toJson
+        let contextPtr = cast[pointer](contextJson)
         let result = scriptRunner.eval(scriptContent, contextPtr)
         debug "Script result: ", $result
       except JSException as e:
@@ -158,7 +162,7 @@ proc runWorkflow*(state: State, workflow: Workflow, depth: int = 0) =
 
   elif workflow.isLeaf:
     # Calculate render state for this workflow's steps
-    state.render_state = calculate_render_state(state.config, workflow.steps, state.context, state.source_files)
+    state.render_state = calculate_render_state(state.config, workflow.steps, state.context.toJson, state.source_files)
 
     # Run steps
     for step in workflow.steps:

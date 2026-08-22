@@ -1,15 +1,15 @@
-import json
-
 import config
 import types/render_state
+import types/context_store
 export render_state
+export context_store
 
 type
   ContextKeyFormatError* = object of ValueError
   ContextNodeAssignmentError* = object of ValueError
 
   State* = ref object
-    context*: JsonNode
+    context*: ContextStore
     config*: Config
     render_state*: RenderState
     ## Candidate source files for this build, relative to the source directory.

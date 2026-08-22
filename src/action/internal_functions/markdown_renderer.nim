@@ -57,7 +57,10 @@ proc for_each_matching_member(node: JsonNode, callback: proc, current_dotted_pat
     callback_if_matches(current_dotted_path, content)
 
 proc run*(step: Step) =
-  state.context.for_each_matching_member(
+  # Walk a snapshot: writes through state{path} replace nodes in the
+  # arena, and the walk keeps visiting the pre-write values, exactly as
+  # the live-tree walk did (replaced nodes were never revisited).
+  state.context.toJson.for_each_matching_member(
     proc (path, content: string) =
       let html = markdown(content)
       state{path} = newJString(html)
