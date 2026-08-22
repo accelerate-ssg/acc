@@ -10,6 +10,7 @@ import std/[unittest, json, strutils]
 import re
 
 import types/context_store
+import arena_context_store
 
 # --- Reference implementations (the pre-arena behavior) ---
 
@@ -257,3 +258,74 @@ suite "ContextStore - toJson":
 
   test "empty store is an empty object":
     check newContextStore().toJson == newJObject()
+
+suite "ContextStore - Script write-back":
+  proc seeded(): ContextStore =
+    result = newContextStore()
+    result.setAccPath(["site", "name"], %"Accodeing")
+    result.setAccPath(["site", "visits"], %10)
+    result.setAccPath(["tags[0]"], %"a")
+    result.setAccPath(["tags[1]"], %"b")
+
+  test "scalar change is applied in place":
+    let store = seeded()
+    let titleId = store.arena.objGet(store.arena.objGet(store.root, "site"), "name")
+    var snapshot = store.toJson
+    snapshot["site"]["name"] = %"Renamed"
+    store.applyScriptChanges(snapshot)
+    check store.toJson == snapshot
+    # In-place: the node kept its identity.
+    check store.arena.objGet(store.arena.objGet(store.root, "site"), "name") == titleId
+
+  test "added nested keys are applied":
+    let store = seeded()
+    var snapshot = store.toJson
+    snapshot["site"]["new"] = %*{"deep": [1, 2]}
+    snapshot["fresh"] = %true
+    store.applyScriptChanges(snapshot)
+    check store.toJson == snapshot
+
+  test "array append is applied":
+    let store = seeded()
+    var snapshot = store.toJson
+    snapshot["tags"].add(%"c")
+    store.applyScriptChanges(snapshot)
+    check store.toJson == snapshot
+
+  test "kind change rebinds":
+    let store = seeded()
+    var snapshot = store.toJson
+    snapshot["site"]["visits"] = %"ten"
+    snapshot["tags"] = %*{"now": "an object"}
+    store.applyScriptChanges(snapshot)
+    check store.toJson == snapshot
+
+  test "array shrink rebinds to the shorter array":
+    let store = seeded()
+    var snapshot = store.toJson
+    snapshot["tags"] = %*["only"]
+    store.applyScriptChanges(snapshot)
+    check store.toJson == snapshot
+
+  test "unchanged subtrees keep their NodeIds":
+    let store = seeded()
+    let siteId = store.arena.objGet(store.root, "site")
+    var snapshot = store.toJson
+    snapshot["other"] = %1
+    store.applyScriptChanges(snapshot)
+    check store.arena.objGet(store.root, "site") == siteId
+
+  test "deleted keys linger":
+    let store = seeded()
+    var snapshot = store.toJson
+    snapshot.delete("tags")
+    store.applyScriptChanges(snapshot)
+    check store.getPath(["tags", "", ""]) == newJNull()  # shape unchanged below
+    check store.toJson.hasKey("tags")
+
+  test "nil and non-object snapshots are ignored":
+    let store = seeded()
+    let before = store.toJson
+    store.applyScriptChanges(nil)
+    store.applyScriptChanges(%"scalar")
+    check store.toJson == before

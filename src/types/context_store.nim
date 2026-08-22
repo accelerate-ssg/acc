@@ -118,6 +118,62 @@ proc toJson*(ctx: ContextStore): JsonNode =
   ## Materialize the whole context as a JsonNode tree.
   ctx.arena.toJson(ctx.root)
 
+proc mergeNode(ctx: ContextStore, id: NodeId, j: JsonNode): bool =
+  ## Reconcile an arena node with a JsonNode in place where possible.
+  ## Returns false when the caller must rebind instead: the kind changed,
+  ## an array shrank, or an array element changed kind (the arena has no
+  ## per-slot rebinding yet).
+  let k = ctx.arena.kind(id)
+  case j.kind
+  of JString:
+    if k != nkString: return false
+    if ctx.arena.getStr(id) != j.getStr: ctx.arena.setStr(id, j.getStr)
+    true
+  of JInt:
+    if k != nkInt: return false
+    if ctx.arena.getInt(id) != j.getInt: ctx.arena.setInt(id, j.getInt)
+    true
+  of JFloat:
+    if k != nkFloat: return false
+    if ctx.arena.getFloat(id) != j.getFloat: ctx.arena.setFloat(id, j.getFloat)
+    true
+  of JBool:
+    if k != nkBool: return false
+    if ctx.arena.getBool(id) != j.getBool: ctx.arena.setBool(id, j.getBool)
+    true
+  of JNull:
+    k == nkNull
+  of JObject:
+    if k != nkObject: return false
+    for key, val in j:
+      let child = ctx.arena.objGet(id, key)
+      if child == InvalidNodeId or not ctx.mergeNode(child, val):
+        ctx.arena.objSet(id, key, ctx.arena.fromJson(val))
+    true
+  of JArray:
+    if k != nkArray: return false
+    let existing = ctx.arena.arrLen(id)
+    if j.len < existing: return false
+    for i in 0 ..< existing:
+      if not ctx.mergeNode(ctx.arena.arrGet(id, i), j[i]):
+        return false
+    for i in existing ..< j.len:
+      ctx.arena.arrPush(id, ctx.arena.fromJson(j[i]))
+    true
+
+proc applyScriptChanges*(ctx: ContextStore, j: JsonNode) =
+  ## Merge mutations a script made to a materialized snapshot back into
+  ## the store. Values are updated in place where the shape allows, so
+  ## untouched subtrees keep their NodeIds; kind changes and shrunken
+  ## arrays rebind wholesale. Keys the script deleted linger, matching
+  ## how re-loading a shrunken content file has always behaved.
+  if j == nil or j.kind != JObject:
+    return
+  for key, val in j:
+    let child = ctx.arena.objGet(ctx.root, key)
+    if child == InvalidNodeId or not ctx.mergeNode(child, val):
+      ctx.arena.objSet(ctx.root, key, ctx.arena.fromJson(val))
+
 proc `$`*(ctx: ContextStore): string =
   $ctx.toJson
 

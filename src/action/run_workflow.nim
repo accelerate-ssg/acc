@@ -100,12 +100,13 @@ proc runScriptStep(step: Step, state: State) =
       let scriptContent = readFile(resolvedPath)
       try:
         scriptRunner.create()
-        # Scripts receive a materialized JsonNode snapshot of the context.
-        # Mutations through this pointer are no longer visible to the build;
-        # script write-back returns when the runner speaks the arena's API.
+        # Scripts receive a materialized JsonNode snapshot of the context
+        # and mutate it in place through the pointer, as they always have.
+        # The mutations are merged back into the store after the run.
         let contextJson = state.context.toJson
         let contextPtr = cast[pointer](contextJson)
         let result = scriptRunner.eval(scriptContent, contextPtr)
+        state.context.applyScriptChanges(contextJson)
         debug "Script result: ", $result
       except JSException as e:
         error "JavaScript error in ", resolvedPath, ": ", e.msg
