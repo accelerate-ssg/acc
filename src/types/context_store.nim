@@ -59,6 +59,10 @@ proc consumer_label*(ctx: ContextStore, id: uint32): string =
   else:
     "<unknown consumer " & $id & ">"
 
+proc known_consumer*(ctx: ContextStore, label: string): bool =
+  ## Whether the label has been interned, without interning it.
+  label in ctx.consumer_ids
+
 proc track*(ctx: ContextStore, label: string): uint32 =
   ## Begin attributing accesses to the labeled consumer: clears its
   ## previous records (a rerun replaces them) and pushes it. Pair with

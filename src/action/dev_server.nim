@@ -1,9 +1,11 @@
 import asynchttpserver, asyncdispatch, os, strutils, ws, atomics, random, sequtils, locks, json, terminal
+import std/[sets, algorithm]
 
 import global_state
 import logger
 import build
 import fswatch
+import arena_context_store
 import types/render_state/file_list
 
 import dev_server/mime_types
@@ -178,6 +180,20 @@ proc file_change_callback(event: Event) {.gcsafe.} =
         changed_path = absolutePath( event.path )
         relative_path = relativePath( changed_path, source_root )
 
+      # Shadow mode: when the changed file is one the loader tracked, report
+      # what the access log says a selective rebuild would cover — without
+      # acting on it yet. Once the sets have proven themselves against real
+      # editing sessions, this query replaces the blanket rebuilds below.
+      let load_label = "@load " & changed_path
+      if state.context.known_consumer( load_label ):
+        let stale = state.context.arena.invalidatedBy( state.context.consumer( load_label ))
+        var labels: seq[string] = @[]
+        for id in stale:
+          labels.add( state.context.consumer_label( id ))
+        labels.sort()
+        notice "[shadow] ", changed_path.extract_filename,
+          " would invalidate ", $labels.len, " consumer(s): ", labels.join( ", " )
+
       # A file outside the source tree, or one that other templates include,
       # can affect any page. Until there is a dependency graph to consult,
       # those rebuild everything; anything else rebuilds only itself.
@@ -224,9 +240,15 @@ proc dev_server*( state: State ) =
   var channel: Channel[Event]
   channel.open()
 
-  let watches = @[
+  # Watch content alongside the sources: a content edit lands in the
+  # callback's outside-the-source-tree branch and rebuilds everything,
+  # while the shadow query reports what a selective rebuild would cover.
+  var watches = @[
     Watch(path: src_dir)
   ]
+  if state.config.directories.content != "" and
+     state.config.directories.content.dirExists:
+    watches.add(Watch(path: state.config.directories.content))
 
   var watcherConfig = newWatcherConfig(watches, file_change_callback, channel)
 
