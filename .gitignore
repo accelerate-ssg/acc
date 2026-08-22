@@ -37,6 +37,7 @@ src/**
 # Compiled test binaries
 test/render_paths
 test/test_cli
+test/context_store
 
 # Atlas-vendored dependency checkouts (own git repos)
 /ws
