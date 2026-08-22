@@ -5,6 +5,22 @@ import global_state
 import config
 import action/internal_functions/step_helpers
 
+when defined(macosx):
+  proc clonefile(src, dst: cstring, flags: uint32): cint
+    {.importc, header: "<sys/clonefile.h>".}
+
+proc copy_asset(source, destination: string) =
+  ## Copy one asset. On APFS this is a copy-on-write clone: a metadata
+  ## operation that moves no data, so even a from-scratch copy of a
+  ## large asset tree costs almost nothing. Falls back to a regular copy
+  ## when cloning is unsupported (other filesystems, other platforms).
+  when defined(macosx):
+    if destination.file_exists:
+      remove_file(destination)  # clonefile refuses to overwrite
+    if clonefile(source.cstring, destination.cstring, 0) == 0:
+      return
+  copy_file(source, destination)
+
 proc run*(step: Step) =
   let
     glob = step.glob()
@@ -28,4 +44,4 @@ proc run*(step: Step) =
       if not destination_path.parent_dir.dir_exists():
         destination_path.parent_dir.create_dir()
 
-      copy_file(absolute_path, destination_path)
+      copy_asset(absolute_path, destination_path)
