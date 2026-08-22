@@ -112,15 +112,17 @@ proc eventCallback(
       itemFlags = flags[i]
       interestingEvents = matchingWatch.kinds
 
-    # Map FSEvent flags to our event types and construct with correct kind
-    if (itemFlags and kFSEventStreamEventFlagItemModified) != 0 and etModify in interestingEvents:
-      ctx.config.channel[].send(Event(kind: etModify, path: path))
-    elif (itemFlags and kFSEventStreamEventFlagItemCreated) != 0 and etCreate in interestingEvents:
-      ctx.config.channel[].send(Event(kind: etCreate, path: path))
-    elif (itemFlags and kFSEventStreamEventFlagItemRemoved) != 0 and etDelete in interestingEvents:
+    # FSEvents flags are a bitmask — one event can carry several. Report
+    # the most significant lifecycle change: a removal or rename beats a
+    # stale modify bit from earlier in the same file's life.
+    if (itemFlags and kFSEventStreamEventFlagItemRemoved) != 0 and etDelete in interestingEvents:
       ctx.config.channel[].send(Event(kind: etDelete, path: path))
     elif (itemFlags and kFSEventStreamEventFlagItemRenamed) != 0 and etRename in interestingEvents:
       ctx.config.channel[].send(Event(kind: etRename, path: path))
+    elif (itemFlags and kFSEventStreamEventFlagItemCreated) != 0 and etCreate in interestingEvents:
+      ctx.config.channel[].send(Event(kind: etCreate, path: path))
+    elif (itemFlags and kFSEventStreamEventFlagItemModified) != 0 and etModify in interestingEvents:
+      ctx.config.channel[].send(Event(kind: etModify, path: path))
 
 proc newWatcherContext(config: ptr WatcherConfig): WatcherContext =
   new(result)
@@ -151,13 +153,17 @@ proc setupWatches(ctx: WatcherContext): bool =
   context.release = nil
   context.copyDescription = nil
 
+  # A small latency lets FSEvents coalesce the burst a single editor
+  # save produces (temp file, rename, attribute change) into one or two
+  # events instead of a stream of them. The consumer batches again on
+  # its side, so this only reduces churn.
   ctx.streamRef = FSEventStreamCreate(
     nil,
     eventCallback,
     addr context,
     pathsToWatch,
     kFSEventStreamEventIdSinceNow,
-    0,
+    0.05,
     cuint(kFSEventStreamCreateFlagNoDefer or kFSEventStreamCreateFlagFileEvents)
   )
 

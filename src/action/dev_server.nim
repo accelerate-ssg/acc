@@ -1,4 +1,19 @@
-import asynchttpserver, asyncdispatch, os, strutils, ws, atomics, random, sequtils, locks, json, terminal
+## Development server: serve the rendered site, watch for changes,
+## rebuild, and tell every connected browser tab to reload.
+##
+## Threading model — deliberately minimal:
+##
+##   One async dispatcher thread runs everything: the HTTP server, the
+##   websocket connections, the change handler and the builds. Builds
+##   block the dispatcher for their duration, which is fine for a dev
+##   server and means none of this state needs locks or atomics.
+##
+##   The only second thread is the platform file watcher, which cannot
+##   share the dispatcher. It communicates exclusively by sending Events
+##   through a Channel; the dispatcher polls the channel. Nothing else
+##   crosses threads.
+
+import asynchttpserver, asyncdispatch, os, strutils, ws, random, sequtils, json, terminal
 import std/[sets, algorithm]
 
 import global_state
@@ -14,13 +29,10 @@ const
   reload_script = static_read "dev_server/force_reload.js"
   file_not_found = static_read "dev_server/file_not_found.html"
   chars = {'A'..'F','0'..'9'}.toSeq
+  port = 1331
 
-var
-  reload_flag: Atomic[bool]
-  wait_time = 10
-  websocket: WebSocket
-  lock: Lock
-  build_running = false
+var clients: seq[tuple[id: string, socket: WebSocket]]
+  ## Every connected tab. Only touched from the dispatcher thread.
 
 proc generate_id() : string =
   result = ""
@@ -47,51 +59,48 @@ proc html_tree_from_dir(dir: string, path_prefix: string = "/"): string =
 
   result.add "</ul>\n"
 
-proc set_websocket(ws: WebSocket) {.gcsafe.} =
+proc broadcast_reload() {.gcsafe.} =
+  ## Tell every connected tab to reload, and forget the ones that are
+  ## gone. Reloading pages close their sockets themselves; the next
+  ## broadcast prunes them.
   {.cast(gcsafe).}:
-    lock.acquire()
-    if websocket != nil and websocket.ready_state == Open:
-      websocket.close()
-      debug "Closing old socket connection."
-    websocket = ws
-    lock.release()
+    var open: seq[tuple[id: string, socket: WebSocket]] = @[]
+    for client in clients:
+      if client.socket.ready_state == Open:
+        debug "Sending reload to tab ", client.id
+        async_check client.socket.send("reload")
+        open.add(client)
+      else:
+        debug "Dropping closed tab ", client.id
+    clients = open
 
 proc process_websocket(request: Request) {.async.} =
+  ## One connection per open tab. The socket only exists so the server
+  ## can push "reload"; whatever the client sends is drained and
+  ## ignored.
   let
     id = generate_id()
     old_parsing_context = get_parsing_context()
 
-  set_parsing_context("process_websocket, " & id)
+  set_parsing_context("websocket " & id)
 
   try:
-    var ws = await new_web_socket(request)
-    debug "Socket connection established. ID: ", $id
-    set_websocket( ws )
-    async_check ws.send("connect")
-    while ws.ready_state == Open:
-      let reload = reload_flag.exchange(false)
-      if not reload:
-        await sleep_async(wait_time)
-        continue
-      if ws.ready_state != Open:
-        debug "Connection not open, not sending reload signal"
-        continue
-
-      debug "Change detected, sending reload signal through ID: ", $id
-      await ws.send("reload")
-      debug "Signal sent."
-      let ack = await ws.receive_str_packet()
-      if ack == "reloading":
-        debug "Acknowledgment received. Closing socket Id: ", $id
-        ws.close()
-    debug "Socket connection closed. ID: ", $id
-  except WebSocketClosedError:
-    debug "Socket error while closing. ID: ", $id
-  except WebSocketProtocolMismatchError:
-    debug "Socket tried to use an unknown protocol. ID: ", $id, ", exception: ", get_current_exception_msg()
+    var socket = await new_web_socket(request)
+    debug "Tab connected: ", id
+    {.cast(gcsafe).}:
+      clients.add((id, socket))
+    await socket.send("connect")
+    while socket.ready_state == Open:
+      discard await socket.receive_str_packet()
   except WebSocketError:
-    debug "Unexpected socket error. ID: ", $id, ", exception: ", get_current_exception_msg()
+    discard  # tabs close sockets when they navigate or reload
   finally:
+    {.cast(gcsafe).}:
+      for i in 0 ..< clients.len:
+        if clients[i].id == id:
+          clients.delete(i)
+          break
+    debug "Tab disconnected: ", id
     set_parsing_context(old_parsing_context)
 
 proc context_as_json(): string {.gcsafe.} =
@@ -99,8 +108,6 @@ proc context_as_json(): string {.gcsafe.} =
     result = $state.context
 
 proc process_request( request: Request, root_dir: string, source_root: string ) {.async, gcsafe.} =
-  warn "Got request"
-
   var
     path: string
     status = Http200
@@ -109,7 +116,7 @@ proc process_request( request: Request, root_dir: string, source_root: string ) 
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store"
     }.newHttpHeaders()
-    existing_file = fileExists(path)
+    existing_file = false
 
   let
     about_context = request.url.path == "/about:context"
@@ -124,10 +131,8 @@ proc process_request( request: Request, root_dir: string, source_root: string ) 
     path = local_path
     existing_file = fileExists(path)
     if existing_file:
-      warn "Found: ", path
-      break;
-    else:
-      warn "Didn't find: ", path
+      debug "Serving: ", path
+      break
 
   if about_context:
     headers["content-type"] = "application/json; charset=utf-8"
@@ -143,6 +148,7 @@ proc process_request( request: Request, root_dir: string, source_root: string ) 
     if ext == ".html" or ext == ".htm":
       content = "<script>" & reload_script & "</script>" & content
   else:
+    debug "Not found: ", request.url.path
     let
       file_tree = html_tree_from_dir(root_dir)
 
@@ -152,68 +158,89 @@ proc process_request( request: Request, root_dir: string, source_root: string ) 
   await request.respond(status, content, headers)
 
 proc handle_request( root_dir: string, source_root: string ): (proc( request: Request) {.async, gcsafe.}) =
-  warn "Starting up web request handler"
   return proc(request: Request) {.async, gcsafe.} =
     if request.url.path == "/ws":
-      warn "[Websocket request]"
       await process_websocket(request)
     else:
-      warn "[HTTP request]"
       await process_request(request, root_dir, source_root)
 
-proc file_change_callback(event: Event) {.gcsafe.} =
+proc report_shadow_invalidation(changed_path: string) {.gcsafe.} =
+  ## Shadow mode: when the changed file is one the loader tracked, report
+  ## what the access log says a selective rebuild would cover — without
+  ## acting on it yet. Once the sets have proven themselves against real
+  ## editing sessions, this query replaces the blanket rebuilds.
+  {.cast(gcsafe).}:
+    let load_label = "@load " & changed_path
+    if state.context.known_consumer( load_label ):
+      let stale = state.context.arena.invalidatedBy( state.context.consumer( load_label ))
+      var labels: seq[string] = @[]
+      for id in stale:
+        labels.add( state.context.consumer_label( id ))
+      labels.sort()
+      notice "[shadow] ", changed_path.extract_filename,
+        " would invalidate ", $labels.len, " consumer(s): ", labels.join( ", " )
+
+proc rebuild(changed: seq[string]) {.gcsafe.} =
+  ## Rebuild for a batch of changed files, then tell the tabs. A file
+  ## outside the source tree, or one that other templates include, can
+  ## affect any page: those rebuild everything, anything else rebuilds
+  ## only itself.
   {.cast(gcsafe).}:
     let old_parsing_context = get_parsing_context()
-    enableTrueColors()
+    set_parsing_context("rebuild")
 
     try:
-      set_parsing_context("file_system_change_monitor {.thread.}")
-      if build_running == true:
-        debug "Change detected, but a build is already running"
-        return
+      let source_root = absolutePath( state.config.directories.src )
+      var
+        rebuild_all = false
+        relative_paths: seq[string] = @[]
 
-      build_running = true
-      debug "Change detected: ", event.path
+      for changed_path in changed:
+        report_shadow_invalidation(changed_path)
+        let relative_path = relativePath( changed_path, source_root )
+        if relative_path.starts_with( ".." ) or state.config.is_partial( relative_path ):
+          rebuild_all = true
+        else:
+          relative_paths.add( relative_path )
 
-      let
-        source_root = absolutePath( state.config.directories.src )
-        changed_path = absolutePath( event.path )
-        relative_path = relativePath( changed_path, source_root )
-
-      # Shadow mode: when the changed file is one the loader tracked, report
-      # what the access log says a selective rebuild would cover — without
-      # acting on it yet. Once the sets have proven themselves against real
-      # editing sessions, this query replaces the blanket rebuilds below.
-      let load_label = "@load " & changed_path
-      if state.context.known_consumer( load_label ):
-        let stale = state.context.arena.invalidatedBy( state.context.consumer( load_label ))
-        var labels: seq[string] = @[]
-        for id in stale:
-          labels.add( state.context.consumer_label( id ))
-        labels.sort()
-        notice "[shadow] ", changed_path.extract_filename,
-          " would invalidate ", $labels.len, " consumer(s): ", labels.join( ", " )
-
-      # A file outside the source tree, or one that other templates include,
-      # can affect any page. Until there is a dependency graph to consult,
-      # those rebuild everything; anything else rebuilds only itself.
-      if relative_path.starts_with( ".." ):
-        debug "Changed file is outside the source directory, rebuilding everything"
-        build( state )
-      elif state.config.is_partial( relative_path ):
-        debug "A partial changed, rebuilding everything: ", relative_path
+      if rebuild_all:
+        debug "Rebuilding everything"
         build( state )
       else:
-        debug "Rebuilding only: ", relative_path
-        build( state, @[ relative_path ] )
+        debug "Rebuilding only: ", relative_paths.join( ", " )
+        build( state, relative_paths )
 
-      reload_flag.store(true)
-      build_running = false
+      broadcast_reload()
 
-    except CatchableError:
-      debug "Exception in file_change_callback"
+    except CatchableError as e:
+      error "Rebuild failed: ", e.msg
+      error "Serving the previous build; fix the error and save to rebuild."
     finally:
       set_parsing_context(old_parsing_context)
+
+proc watch_for_changes(channel: ptr Channel[Event]) {.async.} =
+  ## Poll the watcher's channel. When something arrives, wait a moment
+  ## and drain whatever else has queued, so an editor save that fires
+  ## several events — or several files saved at once — becomes one
+  ## rebuild of the whole batch instead of a build per event.
+  while true:
+    let (has_data, first) = channel[].tryRecv()
+    if not has_data:
+      await sleepAsync(50)
+      continue
+
+    var changed = initOrderedSet[string]()
+    changed.incl(absolutePath(first.path))
+
+    await sleepAsync(30)
+    while true:
+      let (more, event) = channel[].tryRecv()
+      if not more:
+        break
+      changed.incl(absolutePath(event.path))
+
+    debug "Change detected: ", changed.toSeq.join(", ")
+    rebuild(changed.toSeq)
 
 proc dev_server*( state: State ) =
   var server = new_async_http_server()
@@ -224,11 +251,8 @@ proc dev_server*( state: State ) =
     src_dir = state.config.directories.src
     server_root_dir = if dest_dir != "": relative_path(dest_dir, current_dir) else: current_dir
     source_root = if src_dir != "": relative_path(src_dir, current_dir) else: current_dir
-    port = 1331
 
   randomize()
-  init_lock(lock)
-  reload_flag.store(true)
 
   info "╔══════════════════════════════════════════════════════╗"
   info "║  Starting development server at http://0.0.0.0:" & $port & "  ║"
@@ -243,13 +267,12 @@ proc dev_server*( state: State ) =
     error "Initial build failed: ", e.msg
     error "Serving what rendered; fix the error and save to rebuild."
 
-  # Set up file watcher using native fswatch
   var channel: Channel[Event]
   channel.open()
 
   # Watch content alongside the sources: a content edit lands in the
-  # callback's outside-the-source-tree branch and rebuilds everything,
-  # while the shadow query reports what a selective rebuild would cover.
+  # rebuild-everything branch, while the shadow query reports what a
+  # selective rebuild would cover.
   var watches = @[
     Watch(path: src_dir)
   ]
@@ -257,22 +280,13 @@ proc dev_server*( state: State ) =
      state.config.directories.content.dirExists:
     watches.add(Watch(path: state.config.directories.content))
 
-  var watcherConfig = newWatcherConfig(watches, file_change_callback, channel)
+  var watcherConfig = newWatcherConfig(watches, nil, channel)
 
-  # Spawn the platform-specific file watcher thread
+  # The watcher is the only other thread; it just feeds the channel.
   var watcherThread: Thread[ptr WatcherConfig]
   createThread(watcherThread, watch, addr watcherConfig)
 
-  # Poll the channel for file change events and invoke the callback
-  proc pollFileChanges(channel: ptr Channel[Event], callback: WatcherCallback) {.async.} =
-    while true:
-      let (hasData, event) = channel[].tryRecv()
-      if hasData:
-        callback(event)
-      else:
-        await sleepAsync(50)
-
   waitFor all(
     server.serve(Port(port), handle_request(server_root_dir, source_root)),
-    pollFileChanges(watcherConfig.channel, file_change_callback)
+    watch_for_changes(watcherConfig.channel)
   )
