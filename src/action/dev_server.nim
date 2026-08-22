@@ -234,7 +234,14 @@ proc dev_server*( state: State ) =
   info "║  Starting development server at http://0.0.0.0:" & $port & "  ║"
   info "╚══════════════════════════════════════════════════════╝"
 
-  build( state )
+  # A broken template must not keep the dev server from starting: serve
+  # whatever rendered, report the failure, and let the next file change
+  # trigger a rebuild.
+  try:
+    build( state )
+  except CatchableError as e:
+    error "Initial build failed: ", e.msg
+    error "Serving what rendered; fix the error and save to rebuild."
 
   # Set up file watcher using native fswatch
   var channel: Channel[Event]

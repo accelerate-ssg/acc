@@ -23,6 +23,8 @@ proc run(step: Step, state: State) =
     stepGlob = step.glob("*.mustache")
     src_dir = state.config.directories.src
 
+  var failed: seq[string] = @[]
+
   for render_item in state.render_state:
     let absolute_path = src_dir / render_item.source_path
 
@@ -53,7 +55,19 @@ proc run(step: Step, state: State) =
       context["item"] = render_item.item
       context["items"] = render_item.items
 
-      write_file(destination_path, context.render(absolute_path))
+      # A page that fails to render is logged and skipped so the rest of
+      # the site still builds; the failures surface as one error at the
+      # end of the step, so a build still fails overall.
+      try:
+        write_file(destination_path, context.render(absolute_path))
+      except CatchableError as e:
+        error "Failed rendering ", render_item.source_path, " -> ",
+          render_item.output_path, ": ", e.msg
+        failed.add(render_item.output_path)
+
+  if failed.len > 0:
+    raise newException(ValueError, $failed.len & " page(s) failed to render: " &
+      failed.join(", "))
 
 let plugin* = TemplateEnginePlugin(
   name: "mustache",

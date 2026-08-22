@@ -147,6 +147,15 @@ proc runStep*(step: Step, state: State) =
       runScriptStep(step, state)
     else:
       error "Unknown step kind: ", kind
+  except CatchableError as e:
+    # on_failure: continue turns a failed step into a warning, for any
+    # step kind — engines already contain failures to single pages and
+    # re-raise a summary, so this decides whether that summary stops the
+    # workflow.
+    if step.onFailure.isSome and step.onFailure.get == "continue":
+      warn "Step failed, continuing: ", stepLabel(step), ": ", e.msg
+    else:
+      raise
   finally:
     state.context.untrack()
 
