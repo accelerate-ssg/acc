@@ -1,5 +1,7 @@
 import json
 
+import arena_context_store
+
 type
   Path* = string
 
@@ -16,6 +18,13 @@ type
     ## up with parent.parent. nil at the top level, and nil when the enclosing
     ## segment merged several elements into one page.
     parent*: JsonNode
+    ## The context nodes behind item: none renders as null, one is the item
+    ## itself, several are a merged group. Lets a consumer of this page be
+    ## tied to the data that produced it, and lets engines re-materialize
+    ## live data instead of the routing-time copy.
+    item_nodes*: seq[NodeId]
+    ## The context nodes behind items.
+    items_nodes*: seq[NodeId]
 
   RenderState* = seq[RenderStateItem]
 
@@ -26,7 +35,9 @@ proc init_render_state_item*(
   item: JsonNode = newJObject(),
   items: JsonNode = newJArray(),
   key: string = "",
-  parent: JsonNode = nil
+  parent: JsonNode = nil,
+  item_nodes: seq[NodeId] = @[],
+  items_nodes: seq[NodeId] = @[]
 ): RenderStateItem =
   result = RenderStateItem()
   result.source_path = source_path
@@ -36,6 +47,8 @@ proc init_render_state_item*(
   result.items = items
   result.key = key
   result.parent = parent
+  result.item_nodes = item_nodes
+  result.items_nodes = items_nodes
 
 proc init_render_state_item*(
   render_state_item: RenderStateItem,

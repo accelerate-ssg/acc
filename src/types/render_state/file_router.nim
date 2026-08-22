@@ -295,7 +295,9 @@ proc calculate_render_state_items_for*(
             item = materialize(store.arena, frame.scope),
             items = materialize_all(store.arena, frame.elements),
             key = frame.key,
-            parent = frame.bound_parent
+            parent = frame.bound_parent,
+            item_nodes = frame.scope,
+            items_nodes = frame.elements
           ))
         else:
           next.add((joined, frame))
@@ -324,7 +326,9 @@ proc calculate_render_state_items_for*(
             item = if single: store.arena.toJson(elements[0]) else: newJNull(),
             items = materialize_all(store.arena, elements),
             key = name,
-            parent = frame.bound
+            parent = frame.bound,
+            item_nodes = if single: elements else: @[],
+            items_nodes = elements
           ))
         else:
           var bound: JsonNode = nil
