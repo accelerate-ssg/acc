@@ -288,12 +288,20 @@ proc calculate_render_state_items_for*(
         let joined = join_path(path_so_far, segment.prefix)
 
         if is_last:
+          # The materialized item/items are compatibility copies for
+          # engines that still take JsonNode — not a dependency of the
+          # routing itself, so they are built unattributed. The nodes
+          # carry the real identity.
+          var item_json, items_json: JsonNode
+          store.untracked:
+            item_json = materialize(store.arena, frame.scope)
+            items_json = materialize_all(store.arena, frame.elements)
           result.add(init_render_state_item(
             source_path = source_path,
             output_path = joined & ".html",
             render = true,
-            item = materialize(store.arena, frame.scope),
-            items = materialize_all(store.arena, frame.elements),
+            item = item_json,
+            items = items_json,
             key = frame.key,
             parent = frame.bound_parent,
             item_nodes = frame.scope,
@@ -319,12 +327,16 @@ proc calculate_render_state_items_for*(
           single = elements.len == 1
 
         if is_last:
+          var item_json, items_json: JsonNode
+          store.untracked:
+            item_json = if single: store.arena.toJson(elements[0]) else: newJNull()
+            items_json = materialize_all(store.arena, elements)
           result.add(init_render_state_item(
             source_path = source_path,
             output_path = joined & ".html",
             render = true,
-            item = if single: store.arena.toJson(elements[0]) else: newJNull(),
-            items = materialize_all(store.arena, elements),
+            item = item_json,
+            items = items_json,
             key = name,
             parent = frame.bound,
             item_nodes = if single: elements else: @[],
@@ -334,6 +346,9 @@ proc calculate_render_state_items_for*(
           var bound: JsonNode = nil
 
           if single:
+            # Stays tracked: $parent references resolve against this copy
+            # during deeper routing, so the element it captures is a real
+            # routing dependency.
             bound = store.arena.toJson(elements[0])
             if not frame.bound.isNil:
               bound["parent"] = frame.bound

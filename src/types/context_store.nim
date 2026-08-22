@@ -63,6 +63,21 @@ proc known_consumer*(ctx: ContextStore, label: string): bool =
   ## Whether the label has been interned, without interning it.
   label in ctx.consumer_ids
 
+template untracked*(ctx: ContextStore, body: untyped) =
+  ## Run body without attributing arena accesses to any consumer. For
+  ## work that reads the arena on some consumer's behalf without being a
+  ## dependency of the active one — like materializing compatibility
+  ## copies whose real consumers record their own accesses.
+  if ctx.arena.tracking != nil:
+    let saved_consumers = ctx.arena.tracking.consumerStack
+    ctx.arena.tracking.consumerStack = @[]
+    try:
+      body
+    finally:
+      ctx.arena.tracking.consumerStack = saved_consumers
+  else:
+    body
+
 proc track*(ctx: ContextStore, label: string): uint32 =
   ## Begin attributing accesses to the labeled consumer: clears its
   ## previous records (a rerun replaces them) and pushes it. Pair with
