@@ -37,6 +37,9 @@ proc registerContentLoaders*() =
 proc parse(absolute_path: string, relative_path: string) =
   stack.mark()
   stack.add_file_path(relative_path)
+  # One consumer per file: its write set is what a change to this file
+  # invalidates.
+  discard state.context.track("@load " & absolute_path)
   try:
     let content = readFile(absolute_path)
     let node = yamlLoad(state.context.arena, content, absolute_path)
@@ -57,6 +60,7 @@ proc parse(absolute_path: string, relative_path: string) =
     fatal "Unknown exception!"
     raise
   finally:
+    state.context.untrack()
     stack.clear()
 
 proc run*(step: Step) =

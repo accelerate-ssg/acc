@@ -6,7 +6,7 @@
 ## as reference oracles. Every test drives the oracle and the ContextStore
 ## with the same operations and requires identical resulting trees.
 
-import std/[unittest, json, strutils]
+import std/[unittest, json, strutils, sets]
 import re
 
 import types/context_store
@@ -329,3 +329,59 @@ suite "ContextStore - Script write-back":
     store.applyScriptChanges(nil)
     store.applyScriptChanges(%"scalar")
     check store.toJson == before
+
+suite "ContextStore - Consumers":
+  test "labels intern to stable ids":
+    let store = newContextStore()
+    let a = store.consumer("@load a.yaml")
+    let b = store.consumer("@load b.yaml")
+    check a != b
+    check store.consumer("@load a.yaml") == a
+    check store.consumer_label(a) == "@load a.yaml"
+    check store.consumer_label(999) == "<unknown consumer 999>"
+
+  test "track attributes accesses and clears on rerun":
+    let store = newContextStore()
+    let writer = store.track("@load f.yaml")
+    store.setPlainPath(["f"], %*{"v": 1})
+    store.untrack()
+    check store.arena.writeSet(writer).len > 0
+
+    # A reader consumer touches the loaded value.
+    let reader = store.track("@page f.html")
+    discard store.getPath(["f", "v"])
+    store.untrack()
+
+    # The reader is stale when the file's loader rewrites its nodes.
+    discard store.track("@load f.yaml")
+    store.setPlainPath(["f"], %*{"v": 2})
+    store.untrack()
+    let stale = store.arena.invalidatedBy(store.consumer("@load f.yaml"))
+    check reader in stale
+
+    # Re-tracking replaced the loader's first-run records.
+    check store.arena.writeSet(writer).len > 0
+
+  test "unrelated readers stay valid":
+    let store = newContextStore()
+    discard store.track("@load a.yaml")
+    store.setPlainPath(["a"], %*{"v": 1})
+    store.untrack()
+    discard store.track("@load b.yaml")
+    store.setPlainPath(["b"], %*{"v": 1})
+    store.untrack()
+
+    let readerA = store.track("@page a.html")
+    discard store.getPath(["a", "v"])
+    store.untrack()
+    let readerB = store.track("@page b.html")
+    discard store.getPath(["b", "v"])
+    store.untrack()
+
+    discard store.track("@load a.yaml")
+    store.setPlainPath(["a"], %*{"v": 2})
+    store.untrack()
+
+    let stale = store.arena.invalidatedBy(store.consumer("@load a.yaml"))
+    check readerA in stale
+    check readerB notin stale

@@ -119,6 +119,11 @@ proc runScriptStep(step: Step, state: State) =
     else:
       error "No script runner available for extension: ", ext
 
+proc stepLabel(step: Step): string =
+  if step.module != "": step.module
+  elif step.script != "": step.script
+  else: step.command
+
 proc runStep*(step: Step, state: State) =
   if step.comment != "":
     info step.comment
@@ -127,16 +132,23 @@ proc runStep*(step: Step, state: State) =
 
   let startTime = cpuTime()
 
-  let kind = step.stepKind
-  case kind:
-  of "module":
-    runModuleStep(step, state)
-  of "command":
-    runCommandStep(step, state)
-  of "script":
-    runScriptStep(step, state)
-  else:
-    error "Unknown step kind: ", kind
+  # Attribute the step's context accesses to a step-level consumer.
+  # Finer consumers (one per loaded file, later one per rendered page)
+  # push on top of this inside the step.
+  discard state.context.track("@step " & stepLabel(step))
+  try:
+    let kind = step.stepKind
+    case kind:
+    of "module":
+      runModuleStep(step, state)
+    of "command":
+      runCommandStep(step, state)
+    of "script":
+      runScriptStep(step, state)
+    else:
+      error "Unknown step kind: ", kind
+  finally:
+    state.context.untrack()
 
   let elapsed = cpuTime() - startTime
   debug "Step completed in ", $(elapsed * 1000).int, "ms"
@@ -162,8 +174,15 @@ proc runWorkflow*(state: State, workflow: Workflow, depth: int = 0) =
       runWorkflow(state, childWorkflow, depth + 1)
 
   elif workflow.isLeaf:
-    # Calculate render state for this workflow's steps
-    state.render_state = calculate_render_state(state.config, workflow.steps, state.context, state.source_files)
+    # Calculate render state for this workflow's steps. The router's
+    # context reads are attributed to a per-workflow router consumer, so
+    # a data change can later be recognized as making the route table
+    # itself stale.
+    discard state.context.track("@router " & workflow.name)
+    try:
+      state.render_state = calculate_render_state(state.config, workflow.steps, state.context, state.source_files)
+    finally:
+      state.context.untrack()
 
     # Run steps
     for step in workflow.steps:

@@ -19,7 +19,7 @@
 ## Reads mirror the State-level `{}`: plain keys only, any miss or null
 ## yields JNull. Reads return materialized copies, never live views.
 
-import std/[json, strutils]
+import std/[json, strutils, tables]
 import re
 
 import logger
@@ -29,6 +29,11 @@ type
   ContextStore* = ref object
     arena*: Arena
     root*: NodeId
+    ## Consumer registry: the arena tracks consumers as bare uint32 ids,
+    ## these map them to human-meaningful labels — "@load <file>",
+    ## "@router <workflow>", "@step <module>", one per render item later.
+    consumer_names*: seq[string]
+    consumer_ids: Table[string, uint32]
 
 let path_regex = re"^(.+)\[(\d*)\]$"
 
@@ -36,6 +41,34 @@ proc newContextStore*(): ContextStore =
   new(result)
   result.arena = initArena()
   result.root = result.arena.newObj()
+  result.consumer_names = @[]
+  result.consumer_ids = initTable[string, uint32]()
+
+proc consumer*(ctx: ContextStore, label: string): uint32 =
+  ## Intern a consumer label. The same label always yields the same id.
+  if label in ctx.consumer_ids:
+    return ctx.consumer_ids[label]
+  result = uint32(ctx.consumer_names.len)
+  ctx.consumer_names.add(label)
+  ctx.consumer_ids[label] = result
+
+proc consumer_label*(ctx: ContextStore, id: uint32): string =
+  ## The label behind a consumer id, for reporting.
+  if int(id) < ctx.consumer_names.len:
+    ctx.consumer_names[int(id)]
+  else:
+    "<unknown consumer " & $id & ">"
+
+proc track*(ctx: ContextStore, label: string): uint32 =
+  ## Begin attributing accesses to the labeled consumer: clears its
+  ## previous records (a rerun replaces them) and pushes it. Pair with
+  ## untrack.
+  result = ctx.consumer(label)
+  ctx.arena.clearTracking(result)
+  ctx.arena.pushConsumer(result)
+
+proc untrack*(ctx: ContextStore) =
+  ctx.arena.popConsumer()
 
 proc lenLike(ctx: ContextStore, id: NodeId): int =
   ## JsonNode.len semantics: objects and arrays are counted, scalars are 0.
