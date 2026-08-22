@@ -2,7 +2,7 @@
 ## LoadProc, origin tagging, NodeId binding, and origin chaining when
 ## the markdown step rewrites loaded leaves.
 
-import std/[unittest, json, os]
+import std/[unittest, json, os, sets]
 
 import global_state
 import config
@@ -141,3 +141,79 @@ suite "Arena loading - yaml_loader run":
     yaml_loader.run(step)
     yaml_loader.run(step)
     check state.context.getPath(["index", "title"]) == %"Home"
+
+suite "Arena loading - reload precision":
+  test "editing one value in a file invalidates only its readers":
+    # A content dir with one multi-post file, loaded through run().
+    let content_dir = getTempDir() / "acc_reload_precision" / "content"
+    removeDir(content_dir.parentDir)
+    createDir(content_dir)
+    writeFile(content_dir / "posts.yaml",
+      "- slug: first\n  title: One\n- slug: second\n  title: Two\n")
+    state.config.directories.content = content_dir
+    state.context = newContextStore()
+    let step = Step(extraConfig: %*{"glob": "**/*.{yml,yaml}"})
+
+    yaml_loader.run(step)
+
+    # Two page-like consumers, each reading its own post's title.
+    let posts = state.context.lookupPath(["posts"])
+    let pageFirst = state.context.track("@page first.html")
+    discard state.context.arena.getStr(
+      state.context.arena.objGet(state.context.arena.arrGet(posts, 0), "title"))
+    state.context.untrack()
+    let pageSecond = state.context.track("@page second.html")
+    discard state.context.arena.getStr(
+      state.context.arena.objGet(state.context.arena.arrGet(posts, 1), "title"))
+    state.context.untrack()
+    # And a router-like consumer reading both slugs.
+    let router = state.context.track("@router")
+    for i in 0 .. 1:
+      discard state.context.arena.getStr(
+        state.context.arena.objGet(state.context.arena.arrGet(posts, i), "slug"))
+    state.context.untrack()
+
+    # The file changes: only the first post's title.
+    writeFile(content_dir / "posts.yaml",
+      "- slug: first\n  title: Renamed\n- slug: second\n  title: Two\n")
+    yaml_loader.run(step)
+
+    let loader = state.context.consumer("@load " & content_dir / "posts.yaml")
+    let stale = state.context.arena.invalidatedBy(loader)
+    check pageFirst in stale
+    check pageSecond notin stale
+    check router notin stale
+    check state.context.getPath(["posts"]) == %*[
+      {"slug": "first", "title": "Renamed"},
+      {"slug": "second", "title": "Two"},
+    ]
+
+  test "adding a post invalidates iterators but not sibling readers":
+    let content_dir = getTempDir() / "acc_reload_precision" / "content"
+    # Continues from the previous test's state: append a third post.
+    writeFile(content_dir / "posts.yaml",
+      "- slug: first\n  title: Renamed\n- slug: second\n  title: Two\n" &
+      "- slug: third\n  title: Three\n")
+    state.context = newContextStore()
+    let step = Step(extraConfig: %*{"glob": "**/*.{yml,yaml}"})
+    yaml_loader.run(step)
+
+    let posts = state.context.lookupPath(["posts"])
+    let pageFirst = state.context.track("@page first.html")
+    discard state.context.arena.getStr(
+      state.context.arena.objGet(state.context.arena.arrGet(posts, 0), "title"))
+    state.context.untrack()
+    let router = state.context.track("@router")
+    for node in arrItems(state.context.arena, posts):
+      discard state.context.arena.objGet(node, "slug")
+    state.context.untrack()
+
+    writeFile(content_dir / "posts.yaml",
+      "- slug: first\n  title: Renamed\n- slug: second\n  title: Two\n" &
+      "- slug: third\n  title: Three\n- slug: fourth\n  title: Four\n")
+    yaml_loader.run(step)
+
+    let loader = state.context.consumer("@load " & content_dir / "posts.yaml")
+    let stale = state.context.arena.invalidatedBy(loader)
+    check router in stale       # it iterated the array, which grew
+    check pageFirst notin stale # its post did not change

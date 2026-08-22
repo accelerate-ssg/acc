@@ -385,3 +385,102 @@ suite "ContextStore - Consumers":
     let stale = store.arena.invalidatedBy(store.consumer("@load a.yaml"))
     check readerA in stale
     check readerB notin stale
+
+suite "ContextStore - mergePath":
+  proc seededPosts(): ContextStore =
+    result = newContextStore()
+    result.mergePath(["posts"], %*[
+      {"slug": "first", "title": "One"},
+      {"slug": "second", "title": "Two"},
+    ])
+    result.mergePath(["site"], %*{"name": "Test"})
+
+  proc writesUnder(store: ContextStore, label: string, body: proc()) : seq[NodeId] =
+    discard store.track(label)
+    body()
+    store.untrack()
+    store.arena.writeSet(store.consumer(label))
+
+  test "reloading identical content writes nothing":
+    let store = seededPosts()
+    let writes = store.writesUnder("@load posts") do ():
+      store.mergePath(["posts"], %*[
+        {"slug": "first", "title": "One"},
+        {"slug": "second", "title": "Two"},
+      ])
+    check writes.len == 0
+
+  test "a changed value writes only its node, identities survive":
+    let store = seededPosts()
+    let posts = store.lookupPath(["posts"])
+    let firstPost = store.arena.arrGet(posts, 0)
+    let firstTitle = store.arena.objGet(firstPost, "title")
+    let secondPost = store.arena.arrGet(posts, 1)
+
+    let writes = store.writesUnder("@load posts") do ():
+      store.mergePath(["posts"], %*[
+        {"slug": "first", "title": "Renamed"},
+        {"slug": "second", "title": "Two"},
+      ])
+    check writes == @[firstTitle]
+    check store.arena.getStr(firstTitle) == "Renamed"
+    # Nothing was rebound: every identity survives.
+    check store.lookupPath(["posts"]) == posts
+    check store.arena.arrGet(posts, 0) == firstPost
+    check store.arena.arrGet(posts, 1) == secondPost
+
+  test "an appended element pushes without touching siblings":
+    let store = seededPosts()
+    let posts = store.lookupPath(["posts"])
+    let firstPost = store.arena.arrGet(posts, 0)
+    let writes = store.writesUnder("@load posts") do ():
+      store.mergePath(["posts"], %*[
+        {"slug": "first", "title": "One"},
+        {"slug": "second", "title": "Two"},
+        {"slug": "third", "title": "Three"},
+      ])
+    check posts in writes          # the push is an edge write on the array
+    check firstPost notin writes
+    check store.arena.arrLen(posts) == 3
+
+  test "an element that changed shape rebinds its slot only":
+    let store = seededPosts()
+    let posts = store.lookupPath(["posts"])
+    let secondPost = store.arena.arrGet(posts, 1)
+    store.mergePath(["posts"], %*[
+      {"slug": "first", "title": "One"},
+      {"slug": "second", "title": "Two", "draft": true},
+    ])
+    check store.lookupPath(["posts"]) == posts           # array survived
+    check store.arena.arrGet(posts, 1) != secondPost     # slot rebound
+    check store.getPath(["posts"]) == %*[
+      {"slug": "first", "title": "One"},
+      {"slug": "second", "title": "Two", "draft": true},
+    ]
+
+  test "a removed key rebinds the container":
+    let store = seededPosts()
+    let site = store.lookupPath(["site"])
+    store.mergePath(["site"], %*{"renamed": "Test"})
+    check store.lookupPath(["site"]) != site
+    check store.getPath(["site"]) == %*{"renamed": "Test"}
+
+  test "reordered keys rebind, so a fresh build is indistinguishable":
+    let store = newContextStore()
+    store.mergePath(["cfg"], %*{"a": 1, "b": 2})
+    store.mergePath(["cfg"], %*{"b": 2, "a": 1})
+    check store.getPath(["cfg"]) == %*{"b": 2, "a": 1}
+    var keys: seq[string] = @[]
+    for key, val in objPairs(store.arena, store.lookupPath(["cfg"])):
+      keys.add(key)
+    check keys == @["b", "a"]
+
+  test "a shrunk array rebinds":
+    let store = seededPosts()
+    store.mergePath(["posts"], %*[{"slug": "first", "title": "One"}])
+    check store.getPath(["posts"]) == %*[{"slug": "first", "title": "One"}]
+
+  test "a fresh path simply binds":
+    let store = newContextStore()
+    store.mergePath(["brand", "new"], %*{"v": 1})
+    check store.getPath(["brand", "new", "v"]) == %1

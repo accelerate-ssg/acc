@@ -178,11 +178,17 @@ proc toJson*(ctx: ContextStore): JsonNode =
   ## Materialize the whole context as a JsonNode tree.
   ctx.arena.toJson(ctx.root)
 
-proc mergeNode(ctx: ContextStore, id: NodeId, j: JsonNode): bool =
-  ## Reconcile an arena node with a JsonNode in place where possible.
-  ## Returns false when the caller must rebind instead: the kind changed,
-  ## an array shrank, or an array element changed kind (the arena has no
-  ## per-slot rebinding yet).
+proc mergeNode(ctx: ContextStore, id: NodeId, j: JsonNode,
+               strict_keys: bool): bool =
+  ## Reconcile an arena node with a JsonNode in place where possible, so
+  ## unchanged nodes keep their identity and produce no write records.
+  ## Returns false when the caller must rebind instead: the kind changed
+  ## or an array shrank.
+  ##
+  ## strict_keys decides what an object whose key set or key order
+  ## differs means: content reloads rebind it (removals and reordering
+  ## must take effect, and a fresh build must be indistinguishable),
+  ## script write-back merges what is there and lets removed keys linger.
   let k = ctx.arena.kind(id)
   case j.kind
   of JString:
@@ -205,9 +211,18 @@ proc mergeNode(ctx: ContextStore, id: NodeId, j: JsonNode): bool =
     k == nkNull
   of JObject:
     if k != nkObject: return false
+    if strict_keys:
+      # The key sequence must match exactly; otherwise this container is
+      # rebound wholesale. Additions, removals and reorderings all land
+      # here — element-level precision is for value changes.
+      if ctx.arena.objLen(id) != j.len: return false
+      var index = 0
+      for key in j.keys:
+        if ctx.arena.objGetKey(id, index) != key: return false
+        inc index
     for key, val in j:
       let child = ctx.arena.objGet(id, key)
-      if child == InvalidNodeId or not ctx.mergeNode(child, val):
+      if child == InvalidNodeId or not ctx.mergeNode(child, val, strict_keys):
         ctx.arena.objSet(id, key, ctx.arena.fromJson(val))
     true
   of JArray:
@@ -215,11 +230,31 @@ proc mergeNode(ctx: ContextStore, id: NodeId, j: JsonNode): bool =
     let existing = ctx.arena.arrLen(id)
     if j.len < existing: return false
     for i in 0 ..< existing:
-      if not ctx.mergeNode(ctx.arena.arrGet(id, i), j[i]):
-        return false
+      if not ctx.mergeNode(ctx.arena.arrGet(id, i), j[i], strict_keys):
+        # One element changed shape: rebind that slot, not the array.
+        ctx.arena.arrSet(id, i, ctx.arena.fromJson(j[i]))
     for i in existing ..< j.len:
       ctx.arena.arrPush(id, ctx.arena.fromJson(j[i]))
     true
+
+proc lookupPath*(ctx: ContextStore, keys: openArray[string]): NodeId =
+  ## The node bound at a plain key path, or InvalidNodeId.
+  result = ctx.root
+  for key in keys:
+    if ctx.arena.kind(result) != nkObject:
+      return InvalidNodeId
+    result = ctx.arena.objGet(result, key)
+    if result == InvalidNodeId:
+      return InvalidNodeId
+
+proc mergePath*(ctx: ContextStore, keys: openArray[string], value: JsonNode) =
+  ## Bind value at a plain key path, merging into the existing subtree
+  ## when one is there: unchanged nodes keep their NodeIds and produce
+  ## no write records, so reloading a file invalidates only the readers
+  ## of what actually changed in it.
+  let existing = ctx.lookupPath(keys)
+  if existing == InvalidNodeId or not ctx.mergeNode(existing, value, strict_keys = true):
+    ctx.bindPath(keys, ctx.arena.fromJson(value))
 
 proc applyScriptChanges*(ctx: ContextStore, j: JsonNode) =
   ## Merge mutations a script made to a materialized snapshot back into
@@ -231,7 +266,7 @@ proc applyScriptChanges*(ctx: ContextStore, j: JsonNode) =
     return
   for key, val in j:
     let child = ctx.arena.objGet(ctx.root, key)
-    if child == InvalidNodeId or not ctx.mergeNode(child, val):
+    if child == InvalidNodeId or not ctx.mergeNode(child, val, strict_keys = false):
       ctx.arena.objSet(ctx.root, key, ctx.arena.fromJson(val))
 
 proc `$`*(ctx: ContextStore): string =

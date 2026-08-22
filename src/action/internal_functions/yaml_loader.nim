@@ -8,21 +8,26 @@ import config
 import arena_context_store
 import action/internal_functions/[step_helpers, key_stack]
 
+proc yamlToJson*(data: string): JsonNode =
+  ## Parse YAML content. NimYAML parses a superset of JSON, so this also
+  ## serves .json files matched by @yaml step globs, exactly as the
+  ## pre-arena loader did. Multi-document files parse as an array.
+  let json_nodes_seq = loadToJson(data)
+  if json_nodes_seq.len == 1:
+    json_nodes_seq[0]
+  else:
+    var docs = newJArray()
+    for json_node in json_nodes_seq:
+      docs.add(json_node)
+    docs
+
 proc yamlLoad*(arena: var Arena, data: string, path: string): NodeId =
-  ## Arena LoadProc for YAML content. NimYAML parses a superset of JSON,
-  ## so this also serves .json files matched by @yaml step globs, exactly
-  ## as the pre-arena loader did. Multi-document files load as an array.
-  ## Every created node is tagged with the file's origin.
+  ## Arena LoadProc for YAML content: a fresh subtree, every created node
+  ## tagged with the file's origin.
   let oid = arena.registerOrigin(sfYaml, path)
   arena.pushOrigin(oid)
   try:
-    let json_nodes_seq = loadToJson(data)
-    if json_nodes_seq.len == 1:
-      result = arena.fromJson(json_nodes_seq[0])
-    else:
-      result = arena.newArr(initialCap = json_nodes_seq.len)
-      for json_node in json_nodes_seq:
-        arena.arrPush(result, arena.fromJson(json_node))
+    result = arena.fromJson(yamlToJson(data))
   finally:
     arena.popOrigin()
 
@@ -36,12 +41,16 @@ proc parse(stack: var KeyStack, absolute_path: string, relative_path: string) =
   stack.mark()
   stack.add_file_path(relative_path)
   # One consumer per file: its write set is what a change to this file
-  # invalidates.
+  # invalidates. Loading merges into any subtree already bound at the
+  # path, so on a reload only the nodes that actually changed in the
+  # file register as written — one edited post implicates one post's
+  # readers, not the whole file's.
   discard state.context.track("@load " & absolute_path)
+  let origin = state.context.arena.registerOrigin(sfYaml, absolute_path)
+  state.context.arena.pushOrigin(origin)
   try:
     let content = readFile(absolute_path)
-    let node = yamlLoad(state.context.arena, content, absolute_path)
-    state.context.bindPath(stack.atoms, node)
+    state.context.mergePath(stack.atoms, yamlToJson(content))
   except IOError:
     fatal "Error reading file ", absolute_path
     raise
@@ -58,6 +67,7 @@ proc parse(stack: var KeyStack, absolute_path: string, relative_path: string) =
     fatal "Unknown exception!"
     raise
   finally:
+    state.context.arena.popOrigin()
     state.context.untrack()
     stack.clear()
 
