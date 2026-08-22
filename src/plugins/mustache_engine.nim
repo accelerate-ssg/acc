@@ -2,16 +2,14 @@ import std/[os, json, strutils, tables]
 import glob
 import mustache
 
+
+
 import global_state
 import config
 import state as state_module
 import logger
 import plugins/shared_types
 import action/internal_functions/step_helpers
-
-proc render(context: Context, path: string): string =
-  let template_file = readFile(path)
-  result = template_file.render(context)
 
 proc run(step: Step, state: State) =
   var context = new_context(
@@ -24,6 +22,12 @@ proc run(step: Step, state: State) =
     src_dir = state.config.directories.src
 
   var failed: seq[string] = @[]
+
+  # Read each template once, however many pages it expands to. Only the
+  # source string is cached: parsed tokens cannot be reused, because
+  # toAst mutates the token refs while building sections — rendering a
+  # cached token seq twice duplicates section children.
+  var sources = initTable[string, string]()
 
   for render_item in state.render_state:
     let absolute_path = src_dir / render_item.source_path
@@ -59,7 +63,9 @@ proc run(step: Step, state: State) =
       # the site still builds; the failures surface as one error at the
       # end of the step, so a build still fails overall.
       try:
-        write_file(destination_path, context.render(absolute_path))
+        if render_item.source_path notin sources:
+          sources[render_item.source_path] = readFile(absolute_path)
+        write_file(destination_path, sources[render_item.source_path].render(context))
       except CatchableError as e:
         error "Failed rendering ", render_item.source_path, " -> ",
           render_item.output_path, ": ", e.msg
