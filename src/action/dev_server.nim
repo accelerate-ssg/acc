@@ -14,7 +14,7 @@
 ##   crosses threads.
 
 import asynchttpserver, asyncdispatch, os, strutils, ws, random, sequtils, json, terminal
-import std/[sets, algorithm]
+import std/[sets, times]
 
 import global_state
 import logger
@@ -165,34 +165,18 @@ proc handle_request( root_dir: string, source_root: string ): (proc( request: Re
     else:
       await process_request(request, root_dir, source_root)
 
-proc report_shadow_invalidation(changed_path: string) {.gcsafe.} =
-  ## Shadow mode: when the changed file is one the loader tracked, report
-  ## what the access log says a selective rebuild would cover — without
-  ## acting on it yet. Once the sets have proven themselves against real
-  ## editing sessions, this query replaces the blanket rebuilds.
-  {.cast(gcsafe).}:
-    let load_label = "@load " & changed_path
-    if state.context.known_consumer( load_label ):
-      let stale = state.context.arena.invalidatedBy( state.context.consumer( load_label ))
-      var labels: seq[string] = @[]
-      for id in stale:
-        labels.add( state.context.consumer_label( id ))
-      labels.sort()
-      notice "[shadow] ", changed_path.extract_filename,
-        " would invalidate ", $labels.len, " consumer(s): ", labels.join( ", " )
-
 proc rebuild(changes: ChangeSet) {.gcsafe.} =
-  ## Rebuild for a batch of watcher events, then tell the tabs. The
-  ## change set goes through the same classifier CLI builds use.
+  ## Rebuild for a batch of watcher events — selectively, through the
+  ## same classifier and render filter CLI builds use — then persist the
+  ## context and tell the tabs.
   {.cast(gcsafe).}:
     let old_parsing_context = get_parsing_context()
     set_parsing_context("rebuild")
 
     try:
-      for changed_path in changes.changed:
-        report_shadow_invalidation(changed_path)
-
+      let stamp = getTime()
       build( state, changes )
+      state.save_context_cache( stamp )
       broadcast_reload()
 
     except CatchableError as e:
@@ -250,9 +234,13 @@ proc dev_server*( state: State ) =
 
   # A broken template must not keep the dev server from starting: serve
   # whatever rendered, report the failure, and let the next file change
-  # trigger a rebuild.
+  # trigger a rebuild. The cache gives the first edit the same precision
+  # as every later one.
+  discard state.load_context_cache()
   try:
+    let stamp = getTime()
     build( state )
+    state.save_context_cache( stamp )
   except CatchableError as e:
     error "Initial build failed: ", e.msg
     error "Serving what rendered; fix the error and save to rebuild."

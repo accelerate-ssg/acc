@@ -28,8 +28,9 @@ Build/Dev options:
   -u, --using STRATEGY   How to find what changed: full, git, mtime
                          [default: full]
   --since REF            Baseline ref for --using=git [default: HEAD]
-  --cache                Load the persisted context before building and
-                         save it after; enables --using=mtime
+  --no-cache             Do not load or save the persisted build context
+                         (it lives in the work directory and is what
+                         selective rebuilds and --using=mtime build on)
 
 Options:
   -l, --log LEVEL        Log level: all, debug, info, warning, error,
@@ -95,7 +96,7 @@ proc parseCliArgs*(): Config =
   # Change detection strategy
   result.changeStrategy = if args["--using"]: $args["--using"] else: "full"
   result.changeSince = if args["--since"]: $args["--since"] else: "HEAD"
-  result.useCache = bool(args["--cache"])
+  result.useCache = not bool(args["--no-cache"])
 
   # Apply CLI directory overrides
   if args["--src"]:

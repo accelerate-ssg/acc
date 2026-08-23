@@ -10,6 +10,7 @@ import state as state_module
 import logger
 import plugins/shared_types
 import action/internal_functions/step_helpers
+import render_filter
 
 proc run(step: Step, state: State) =
   var context = new_context(
@@ -29,10 +30,13 @@ proc run(step: Step, state: State) =
   # cached token seq twice duplicates section children.
   var sources = initTable[string, string]()
 
+  state.ensure_render_filter(step)
+
   for render_item in state.render_state:
     let absolute_path = src_dir / render_item.source_path
 
-    if render_item.source_path.matches(stepGlob):
+    if render_item.source_path.matches(stepGlob) and
+       state.should_render(render_item, step.module):
       let destination_path = state.config.directories.destination / render_item.output_path
 
       if not destination_path.parentDir.dirExists():
@@ -66,6 +70,7 @@ proc run(step: Step, state: State) =
         if render_item.source_path notin sources:
           sources[render_item.source_path] = readFile(absolute_path)
         write_file(destination_path, sources[render_item.source_path].render(context))
+        state.rendered_outputs.add(render_item.output_path)
       except CatchableError as e:
         error "Failed rendering ", render_item.source_path, " -> ",
           render_item.output_path, ": ", e.msg

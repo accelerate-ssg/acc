@@ -61,18 +61,10 @@ proc main() =
   of ActionBuild:
     let stamp = getTime()
 
-    # Opt-in persistence: pick up where the last build left off, so the
-    # loader merges instead of rebuilding, the access log describes the
-    # previous build from the first edit, and mtime has a baseline.
-    var cached_stamp = none(Time)
-    if state.config.useCache:
-      let cache_file = state.config.directories.work / "context.cache"
-      let loaded = loadCache(cache_file)
-      if loaded.isSome:
-        state.context = loaded.get.store
-        cached_stamp = some(loaded.get.stamp)
-        registerContentLoaders()
-        notice "Continuing from the cached context of the previous build."
+    # Cached by default: pick up where the last build left off, so the
+    # loader merges instead of rebuilding, selective builds know what the
+    # previous build read, and mtime has a baseline.
+    let cached_stamp = state.load_context_cache()
 
     case state.config.changeStrategy
     of "", "full":
@@ -81,7 +73,7 @@ proc main() =
       state.build(gitChangeSet(state.config, state.config.changeSince))
     of "mtime":
       if cached_stamp.isNone:
-        error "--using=mtime compares against a cached build: run with --cache, twice."
+        error "--using=mtime compares against a cached previous build, and there is none yet."
         quit(1)
       state.build(mtimeChangeSet(state.config, cached_stamp.get))
     else:
@@ -89,8 +81,7 @@ proc main() =
         " (expected full, git or mtime)"
       quit(1)
 
-    if state.config.useCache:
-      state.context.saveCache(state.config.directories.work / "context.cache", stamp)
+    state.save_context_cache(stamp)
   of ActionTest: state.test()
   of ActionClean: state.clean()
   of ActionRun: state.run()

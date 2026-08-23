@@ -552,3 +552,63 @@ suite "ContextStore - Cache":
     createDir(path.parentDir)
     writeFile(path, "not a cache at all")
     check loadCache(path).isNone
+
+suite "ContextStore - rebinds retire old subtrees":
+  test "a direct-handle reader is stale after the container rebinds":
+    # Pages read their item through a NodeId handle the router handed
+    # them, not through edges from the root. When the array they live in
+    # is replaced wholesale (here: it shrank), their nodes are dead and
+    # they must invalidate — otherwise their records point at orphans and
+    # the next real change to the new nodes never reaches them.
+    let store = newContextStore()
+    store.mergePath(["posts"], %*[
+      {"slug": "first", "title": "One"},
+      {"slug": "second", "title": "Two"},
+    ])
+    let posts = store.lookupPath(["posts"])
+    let firstTitle = store.arena.objGet(store.arena.arrGet(posts, 0), "title")
+
+    let page = store.track("@page first.html")
+    discard store.arena.getStr(firstTitle)   # handle read: no root edges
+    store.untrack()
+
+    discard store.track("@load posts.yaml")
+    store.mergePath(["posts"], %*[{"slug": "first", "title": "One"}])  # shrank
+    store.untrack()
+
+    check page in store.arena.invalidatedBy(store.consumer("@load posts.yaml"))
+
+  test "a slot rebind retires only that element":
+    let store = newContextStore()
+    store.mergePath(["posts"], %*[{"a": 1}, {"b": 2}])
+    let posts = store.lookupPath(["posts"])
+    let first = store.arena.arrGet(posts, 0)
+    let second = store.arena.arrGet(posts, 1)
+
+    let readerFirst = store.track("@page first")
+    discard store.arena.objGet(first, "a")
+    store.untrack()
+    let readerSecond = store.track("@page second")
+    discard store.arena.objGet(second, "b")
+    store.untrack()
+
+    discard store.track("@load posts.yaml")
+    store.mergePath(["posts"], %*[{"a": 1}, {"b": 2, "c": 3}])  # second changed shape
+    store.untrack()
+
+    let stale = store.arena.invalidatedBy(store.consumer("@load posts.yaml"))
+    check readerSecond in stale
+    check readerFirst notin stale
+
+  test "unloading a file retires its subtree":
+    let store = newContextStore()
+    store.mergePath(["site"], %*{"name": "x"})
+    let name = store.arena.objGet(store.lookupPath(["site"]), "name")
+    let reader = store.track("@page index.html")
+    discard store.arena.getStr(name)
+    store.untrack()
+
+    discard store.track("@load site.yaml")
+    store.bindPath(["site"], store.arena.newNull())
+    store.untrack()
+    check reader in store.arena.invalidatedBy(store.consumer("@load site.yaml"))

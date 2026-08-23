@@ -192,6 +192,8 @@ proc runWorkflow*(state: State, workflow: Workflow, depth: int = 0) =
       state.render_state = calculate_render_state(state.config, workflow.steps, state.context, state.source_files)
     finally:
       state.context.untrack()
+    for item in state.render_state:
+      state.routed_outputs.add((item.source_path, item.output_path))
 
     # Run steps
     for step in workflow.steps:

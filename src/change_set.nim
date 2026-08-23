@@ -34,15 +34,21 @@ type
   BuildDecision* = object
     ## What a change set means for a build.
     full*: bool
-      ## Render everything: a content, config or partial change, or a
-      ## removal whose page set cannot be narrowed yet.
+      ## Render everything: a config or partial change — anything whose
+      ## effect the dependency tracking cannot see.
     reason*: string
       ## Why everything, when full is set.
     sources*: seq[string]
-      ## Otherwise: the source-relative template files to render.
+      ## Changed templates, source-relative: all their pages render.
+    content*: seq[string]
+      ## Changed content files, absolute: their loaders' write records
+      ## decide which pages render.
+    removed_content*: seq[string]
+      ## Removed content files, absolute: unloaded before the build so
+      ## their readers invalidate like any other change.
     removed_sources*: seq[string]
-      ## Removed files under src — their outputs are stale but are not
-      ## unlinked yet (that lands with route-set diffing).
+      ## Removed templates, source-relative: their pages vanish from the
+      ## route set, and route-set diffing unlinks the outputs.
 
 proc fullChangeSet*(): ChangeSet =
   ChangeSet(full: true)
@@ -101,10 +107,10 @@ proc mtimeChangeSet*(cfg: Config, since: Time): ChangeSet =
           result.changed.add(path)
 
 proc classify*(cfg: Config, change_set: ChangeSet): BuildDecision =
-  ## Decide what a change set means. Conservative by design: anything
-  ## whose page set cannot be narrowed yet renders everything. The
-  ## narrowing tightens as invalidation-driven rendering lands; the
-  ## decision point stays here.
+  ## Decide what a change set means. Template and content changes are
+  ## selective — the render filter narrows them to pages. Only changes
+  ## the dependency tracking cannot see (partials, config, anything else
+  ## in the project) render everything.
   if change_set.full:
     return BuildDecision(full: true, reason: "full build requested")
 
@@ -123,10 +129,7 @@ proc classify*(cfg: Config, change_set: ChangeSet): BuildDecision =
           reason: "partial changed: " & relative)
       result.sources.add(relative)
     elif content != "" and path.isRelativeTo(content):
-      # Until rendering is invalidation-driven, a data change can affect
-      # any page.
-      return BuildDecision(full: true,
-        reason: "content changed: " & path.relativePath(content))
+      result.content.add(path)
     else:
       # Config, scripts, or anything else in the project.
       return BuildDecision(full: true,
@@ -135,10 +138,8 @@ proc classify*(cfg: Config, change_set: ChangeSet): BuildDecision =
   for path in change_set.removed:
     if src != "" and path.isRelativeTo(src):
       result.removed_sources.add(path.relativePath(src))
+    elif content != "" and path.isRelativeTo(content):
+      result.removed_content.add(path)
     else:
       return BuildDecision(full: true,
         reason: "removed: " & path.extractFilename)
-
-  if result.removed_sources.len > 0:
-    warn "Removed sources leave stale output until route diffing lands: ",
-      result.removed_sources.join(", ")

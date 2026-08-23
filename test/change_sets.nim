@@ -107,12 +107,13 @@ suite "Change sets - classifier":
     check decision.full
     check "partial" in decision.reason
 
-  test "a content change rebuilds everything, for now":
+  test "a content change is selective":
     let decision = classify(cfg, ChangeSet(changed: @[
       root / "content" / "site.yaml",
     ]))
-    check decision.full
-    check "content" in decision.reason
+    check not decision.full
+    check decision.content == @[root / "content" / "site.yaml"]
+    check decision.sources.len == 0
 
   test "a project file change rebuilds everything":
     check classify(cfg, ChangeSet(changed: @[root / "acc.yaml"])).full
@@ -126,5 +127,7 @@ suite "Change sets - classifier":
     check decision.sources == @["index.mustache"]
     check decision.removed_sources == @["about.mustache"]
 
-  test "a removed content file rebuilds everything":
-    check classify(cfg, ChangeSet(removed: @[root / "content" / "site.yaml"])).full
+  test "a removed content file is unloaded selectively":
+    let decision = classify(cfg, ChangeSet(removed: @[root / "content" / "site.yaml"]))
+    check not decision.full
+    check decision.removed_content == @[root / "content" / "site.yaml"]

@@ -34,6 +34,10 @@ type
     ## "@router <workflow>", "@step <module>", one per render item later.
     consumer_names*: seq[string]
     consumer_ids: Table[string, uint32]
+    ## The pages the previous build routed, as (source, output) pairs:
+    ## what route-set diffing compares against to find pages that
+    ## appeared or disappeared.
+    previous_outputs*: seq[tuple[source: string, output: string]]
 
 let path_regex = re"^(.+)\[(\d*)\]$"
 
@@ -110,6 +114,11 @@ proc bindPath*(ctx: ContextStore, keys: openArray[string], node: NodeId) =
       child = ctx.arena.newObj()
       ctx.arena.objSet(target, keys[i], child)
     target = child
+  # A rebind retires whatever was bound before, so readers holding
+  # direct handles into the old subtree invalidate too.
+  let previous = ctx.arena.objGet(target, keys[^1])
+  if previous != InvalidNodeId and previous != node:
+    ctx.arena.retireSubtree(previous)
   ctx.arena.objSet(target, keys[^1], node)
 
 proc setPlainPath*(ctx: ContextStore, keys: openArray[string], value: JsonNode) =
@@ -223,6 +232,8 @@ proc mergeNode(ctx: ContextStore, id: NodeId, j: JsonNode,
     for key, val in j:
       let child = ctx.arena.objGet(id, key)
       if child == InvalidNodeId or not ctx.mergeNode(child, val, strict_keys):
+        if child != InvalidNodeId:
+          ctx.arena.retireSubtree(child)
         ctx.arena.objSet(id, key, ctx.arena.fromJson(val))
     true
   of JArray:
@@ -230,8 +241,10 @@ proc mergeNode(ctx: ContextStore, id: NodeId, j: JsonNode,
     let existing = ctx.arena.arrLen(id)
     if j.len < existing: return false
     for i in 0 ..< existing:
-      if not ctx.mergeNode(ctx.arena.arrGet(id, i), j[i], strict_keys):
+      let element = ctx.arena.arrGet(id, i)
+      if not ctx.mergeNode(element, j[i], strict_keys):
         # One element changed shape: rebind that slot, not the array.
+        ctx.arena.retireSubtree(element)
         ctx.arena.arrSet(id, i, ctx.arena.fromJson(j[i]))
     for i in existing ..< j.len:
       ctx.arena.arrPush(id, ctx.arena.fromJson(j[i]))
@@ -275,11 +288,24 @@ proc `$`*(ctx: ContextStore): string =
 # ─── Cache ───────────────────────────────────────────────────────────
 
 const ContextCacheMagic = 0x41434343'u32  # "ACCC"
-const ContextCacheVersion = 1'u32
+const ContextCacheVersion = 2'u32
+
+proc writeStr(s: Stream, v: string) =
+  s.write(uint32(v.len))
+  if v.len > 0:
+    s.writeData(unsafeAddr v[0], v.len)
+
+proc readStr(s: Stream): string =
+  let len = int(s.readUint32())
+  result = newString(len)
+  if len > 0:
+    if s.readData(addr result[0], len) != len:
+      raise newException(IOError, "truncated")
 
 proc saveCache*(ctx: ContextStore, path: string, stamp: Time) =
-  ## Persist the context — tree, origins, access log, consumer labels —
-  ## with the build stamp mtime-based change detection compares against.
+  ## Persist the context — tree, origins, access log, consumer labels,
+  ## the previous build's routed pages — with the build stamp that
+  ## mtime-based change detection compares against.
   createDir(path.parentDir)
   let s = newFileStream(path, fmWrite)
   defer: s.close()
@@ -289,9 +315,11 @@ proc saveCache*(ctx: ContextStore, path: string, stamp: Time) =
   s.write(uint32(ctx.root))
   s.write(uint32(ctx.consumer_names.len))
   for name in ctx.consumer_names:
-    s.write(uint32(name.len))
-    if name.len > 0:
-      s.writeData(unsafeAddr name[0], name.len)
+    s.writeStr(name)
+  s.write(uint32(ctx.previous_outputs.len))
+  for (source, output) in ctx.previous_outputs:
+    s.writeStr(source)
+    s.writeStr(output)
   ctx.arena.saveArena(s)
 
 proc loadCache*(path: string): Option[tuple[store: ContextStore, stamp: Time]] =
@@ -313,14 +341,14 @@ proc loadCache*(path: string): Option[tuple[store: ContextStore, stamp: Time]] =
     let root = NodeId(s.readUint32())
     var names: seq[string] = @[]
     for i in 0 ..< int(s.readUint32()):
-      let len = int(s.readUint32())
-      var name = newString(len)
-      if len > 0:
-        if s.readData(addr name[0], len) != len:
-          warn "Ignoring truncated context cache: ", path
-          return
-      names.add(name)
-    let store = ContextStore(arena: loadArena(s), root: root)
+      names.add(s.readStr())
+    var outputs: seq[tuple[source: string, output: string]] = @[]
+    for i in 0 ..< int(s.readUint32()):
+      let source = s.readStr()
+      let output = s.readStr()
+      outputs.add((source, output))
+    let store = ContextStore(arena: loadArena(s), root: root,
+                             previous_outputs: outputs)
     for name in names:
       discard store.consumer(name)
     result = some((store, stamp))

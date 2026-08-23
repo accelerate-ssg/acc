@@ -88,3 +88,33 @@ proc run*(step: Step) =
     if file.matches(glob):
       notice "Parsing: ", file
       stack.parse(content_dir / file, file)
+
+proc unload*(absolute_path: string) =
+  ## A content file was removed: bind null where it was loaded, under its
+  ## own loader consumer, so everything that read it invalidates exactly
+  ## like a change would. The path is resolved the way run() would have
+  ## loaded it, including any configured context_path_prefix.
+  let content_dir = state.config.directories.content
+  if content_dir == "" or not absolute_path.isRelativeTo(content_dir):
+    return
+  let relative_path = absolute_path.relativePath(content_dir)
+
+  var prefix = ""
+  for workflow in state.config.workflows:
+    for step in workflow.steps:
+      if step.module in ["@yaml", "yaml"]:
+        prefix = step.context_path_prefix("")
+
+  var stack = newKeyStack()
+  stack.add_dotted_path(prefix)
+  stack.add_file_path(relative_path)
+
+  if state.context.lookupPath(stack.atoms) == InvalidNodeId:
+    return
+
+  notice "Unloading removed content: ", relative_path
+  discard state.context.track("@load " & absolute_path)
+  try:
+    state.context.bindPath(stack.atoms, state.context.arena.newNull())
+  finally:
+    state.context.untrack()
