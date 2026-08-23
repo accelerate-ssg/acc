@@ -40,6 +40,7 @@ test/test_cli
 test/context_store
 test/arena_loading
 test/change_sets
+test/path_router_spec
 
 # Atlas-vendored dependency checkouts (own git repos)
 /ws
