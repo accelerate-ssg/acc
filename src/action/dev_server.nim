@@ -13,7 +13,7 @@
 ##   through a Channel; the dispatcher polls the channel. Nothing else
 ##   crosses threads.
 
-import asynchttpserver, asyncdispatch, os, strutils, ws, random, sequtils, json, terminal
+import asynchttpserver, asyncdispatch, os, strutils, ws, random, sequtils, json, terminal, uri
 import std/[sets, times]
 
 import global_state
@@ -121,11 +121,13 @@ proc process_request( request: Request, root_dir: string, source_root: string ) 
 
   let
     about_context = request.url.path == "/about:context"
+    # Browsers percent-encode non-ASCII paths; the files on disk are not.
+    request_path = decodeUrl(request.url.path)
     paths = [
-      root_dir / request.url.path,
-      root_dir / request.url.path / "index.html",
-      root_dir / request.url.path & ".html",
-      source_root / request.url.path
+      root_dir / request_path,
+      root_dir / request_path / "index.html",
+      root_dir / request_path & ".html",
+      source_root / request_path
     ]
 
   for local_path in paths:
@@ -149,7 +151,7 @@ proc process_request( request: Request, root_dir: string, source_root: string ) 
     if ext == ".html" or ext == ".htm":
       content = "<script>" & reload_script & "</script>" & content
   else:
-    debug "Not found: ", request.url.path
+    debug "Not found: ", request_path
     let
       file_tree = html_tree_from_dir(root_dir)
 
