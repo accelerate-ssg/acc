@@ -20,7 +20,16 @@ proc loadStep(step: YamlNode, config: Config): Step =
     result.onFailure = none(string)
 
   if result.script == "" and result.command == "" and result.module == "":
-    raise newException(ValueError, "Step must have a script, command, or module field")
+    var keys: seq[string] = @[]
+    if step.kind == yMapping and step.fields != nil:
+      for key, _ in step.fields[]:
+        keys.add(key.content)
+    raise newException(ConfigShapeError,
+      "step must have a 'script', 'command', or 'module' field (found: " &
+      (if keys.len > 0: keys.join(", ") else: "nothing") & ")" &
+      (if "workflow" in keys: " — to run another workflow, list its " &
+        "name under the workflow's 'workflows' field instead of a step"
+       else: ""))
 
   # Collect unknown keys into extraConfig
   result.extraConfig = newJObject()
@@ -45,6 +54,9 @@ proc loadStep(step: YamlNode, config: Config): Step =
         # yAnchor and yAlias are not supported
 
 proc loadWorkflow(workflow: YamlNode, config: Config): Workflow =
+  if workflow.kind != yMapping:
+    raise newException(ConfigShapeError,
+      "each entry under 'workflows' must be a mapping with a 'name'")
   result = Workflow(
     name: safeInterpolateStr(safeGet(workflow, "name"), config),
     `if`: safeInterpolateStr(safeGet(workflow, "if"), config),
@@ -54,10 +66,22 @@ proc loadWorkflow(workflow: YamlNode, config: Config): Workflow =
   )
 
   if safeGet(workflow, "steps").isSome:
-    result.steps = safeGet(workflow, "steps").get.elems.mapIt(loadStep(it, config))
+    let steps = safeGet(workflow, "steps").get
+    if steps.kind != ySequence:
+      raise newException(ConfigShapeError,
+        "workflow '" & result.name & "': 'steps' must be a list")
+    result.steps = steps.elems.mapIt(loadStep(it, config))
 
   if safeGet(workflow, "workflows").isSome:
-    result.workflows = safeInterpolateSeq(safeGet(workflow, "workflows"), config)
+    # A composition names its sibling workflows; inlining whole workflow
+    # objects here is the natural first guess, so name the fix.
+    try:
+      result.workflows = safeInterpolateSeq(safeGet(workflow, "workflows"), config)
+    except ConfigShapeError:
+      raise newException(ConfigShapeError,
+        "workflow '" & result.name & "': 'workflows' must be a list of " &
+        "workflow *names* (strings) defined at the top level, not " &
+        "inlined workflow definitions")
 
 proc loadDirectories(directories: YamlNode, config: Config): Directories =
   result = Directories(

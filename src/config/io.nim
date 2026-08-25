@@ -34,13 +34,23 @@ proc loadConfig*(config_file: string): Config =
   config.genericConfig = loadToJson(config_file)[0]
   config.manifestVersion = safeInterpolateStr(safeGet(yaml, "manifest_version"), Config(genericConfig: newJObject()))
   
-  config.directories = safeGet(yaml, "directories")
-    .map(proc(node: YamlNode): Directories = loadDirectories(node, config))
-    .get(Directories())
+  # Plain control flow, not Options.map: the loaders raise
+  # ConfigShapeError on malformed values, and an exception propagating
+  # out of a .map closure segfaults here (nim 2.0.6/orc) instead of
+  # unwinding — which is how a bad config crashed the binary rather
+  # than reporting what was wrong.
+  let directoriesNode = safeGet(yaml, "directories")
+  if directoriesNode.isSome:
+    if directoriesNode.get.kind != yMapping:
+      raise newException(ConfigShapeError, "'directories' must be a mapping")
+    config.directories = loadDirectories(directoriesNode.get, config)
 
-  config.workflows = safeGet(yaml, "workflows")
-    .map(proc(node: YamlNode): seq[Workflow] = node.elems.mapIt(loadWorkflow(it, config)))
-    .get(@[])
+  let workflowsNode = safeGet(yaml, "workflows")
+  if workflowsNode.isSome:
+    if workflowsNode.get.kind != ySequence:
+      raise newException(ConfigShapeError, "'workflows' must be a list")
+    for entry in workflowsNode.get.elems:
+      config.workflows.add(loadWorkflow(entry, config))
 
   # Remove the schema config keys from the generic config object
   if config.genericConfig.hasKey("manifest_version"): config.genericConfig.delete("manifest_version")

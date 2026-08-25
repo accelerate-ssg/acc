@@ -82,7 +82,13 @@ proc parseCliArgs*(): Config =
 
   if fileExists(config_path) and result.action != ActionInit:
     let file_content = readFile(config_path)
-    result = loadConfig(file_content)
+    # A malformed config is a user error, not a crash: report the file
+    # and the problem, then exit.
+    try:
+      result = loadConfig(file_content)
+    except CatchableError as e:
+      stderr.writeLine "Invalid config " & config_path & ": " & e.msg
+      quit(1)
     result.directories.root = root_dir
     # Re-apply the action (loadConfig doesn't set it)
     if args["init"]: result.action = ActionInit
