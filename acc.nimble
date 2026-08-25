@@ -11,16 +11,24 @@ paths = @[".","src"]
 
 # Dependencies
 #
-# The vendored dependencies under deps/ are resolved by the Atlas section of
-# src/nim.cfg; the sibling projects below are declared here because they are
-# ours and are tracked as git repositories rather than published packages.
+# Everything acc imports, declared here and resolved by nimble. Versions are
+# the ones acc is known to build and produce identical output with.
 
 requires "nim >= 2.0.6"
-requires "glob >= 0.11.2"
+
+requires "glob >= 0.11.3"        # step and blacklist globbing
+requires "yaml >= 2.1.1"         # content loading
+requires "docopt >= 0.7.1"       # CLI parsing
+requires "markdown >= 0.8.8"     # the @markdown module
+requires "ws >= 0.5.0"           # dev server live reload
+
+# Ours, tracked as git repositories rather than published packages. Checkouts
+# that keep them as siblings compile against those working copies instead —
+# see the paths in src/nim.cfg.
 
 # The build context store.
 requires "git+ssh://git@github.com/accelerate-ssg/arena.git"
 
-# The template engine: one bytecode VM with per-language frontends, of which
-# the Liquid one backs the @liquid module.
+# The template engine: one bytecode VM with per-language frontends, backing
+# both the @liquid and @mustache modules.
 requires "git+ssh://git@github.com/accelerate-ssg/pitchfork.git"

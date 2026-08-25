@@ -1,5 +1,5 @@
 import json
-import std/[times, options, os]
+import std/[times, options]
 
 import global_state
 import logger

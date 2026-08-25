@@ -1,11 +1,9 @@
 nimbledeps
 nimpledeps
 node_modules
-deps
 
 # Build artifacts
 accelerate.json
-atlas.workspace
 *.out
 
 # Compiled binaries in src/
@@ -41,7 +39,3 @@ test/context_store
 test/arena_loading
 test/change_sets
 test/path_router_spec
-
-# Atlas-vendored dependency checkouts (own git repos)
-/ws
-/packages

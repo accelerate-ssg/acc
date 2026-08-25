@@ -96,13 +96,17 @@ Accelerate (Acc) is a static site generator implemented in Nim. It uses a workfl
 
 ### Dependencies
 
-Dependencies are vendored in `deps/` directory, including:
-- NimYAML, docopt, glob, markdown, regex, cligen
+Dependencies are declared in `acc.nimble` and resolved by nimble — there is no
+vendored `deps/` tree and no Atlas workspace. `nimble install -y` from a fresh
+checkout is enough to build.
+
+- Third party: glob, yaml (NimYAML), docopt, markdown, ws
 - No external fswatch library needed (native implementation)
 - No external mustache library needed (pitchfork renders both languages)
 
-Two sibling projects are used by path (configured in `src/nim.cfg`, and declared
-by git URL in `acc.nimble`):
+Two sibling projects are ours, declared by git URL in `acc.nimble` and also
+listed as paths in `src/nim.cfg`, so a checkout that keeps them side by side
+compiles against those working copies rather than an installed snapshot:
 - `../pitchfork/` — the template engine
 - `../arena_context_store/` — the build context store
 
