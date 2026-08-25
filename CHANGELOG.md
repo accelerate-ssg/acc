@@ -45,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ported dynamic template item population fix from v0.1.1 for object-based collections.
 - Fixed file router test cases to use correct relative paths (matching production file_list behavior).
 - Percent-encoded request paths are decoded by the dev server, so pages with non-ASCII names are served instead of 404ing (ported from the legacy line).
+- The development server no longer serves pages in quirks mode. The live reload script is injected after `<!DOCTYPE html>` instead of before it, so layout in `acc dev` matches what `acc build` produces (ported from the legacy line).
 
 ### Reconciled with the legacy development line
 
@@ -55,6 +56,10 @@ audited against this line; the outcome:
 
 - The 0.1.1 release engineering, CI matrix, Windows build fixes, CHANGELOG and
   install/release documentation are all present here.
+- `tasks/release.nims` is carried across unchanged. It is not wired up on
+  either line: `acc.nimble` does not include it yet, and it expects a
+  `## [Unreleased]` heading and `[Unreleased]: ` link definition in this file,
+  plus a `main` release branch.
 - Building fswatch from source on Linux is obsolete: the file watcher is now a
   native implementation with no external dependency.
 - Two routing fixes from that line are obsolete under the current router
