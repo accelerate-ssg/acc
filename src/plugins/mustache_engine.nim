@@ -1,8 +1,6 @@
 import std/[os, json, strutils, tables]
 import glob
-import mustache
-
-
+import mustache_lib
 
 import global_state
 import config
@@ -12,23 +10,45 @@ import plugins/shared_types
 import action/internal_functions/step_helpers
 import render_filter
 
-proc run(step: Step, state: State) =
-  var context = new_context(
-    searchDirs = step.search_dirs(),
-    values = state.context.toJson.toValues()
-  )
+proc load_partials(step: Step, config: Config): Table[string, string] =
+  ## Load the partials a template can reference, keyed the way it
+  ## references them. Templates name partials relative to a search
+  ## directory and without the extension — `{{> partials/head}}` from
+  ## the source root, or `{{> head}}` from the partials directory
+  ## itself — so every search directory contributes its own key for the
+  ## same file. The first directory listed wins a collision, matching
+  ## the search order it describes.
+  result = initTable[string, string]()
 
+  var dirs = @[config.directories.src]
+  for dir in step.search_dirs():
+    dirs.add(if dir.isAbsolute: dir else: config.directories.root / dir)
+  if not step.extraConfig.isNil and step.extraConfig.hasKey("partial_directories"):
+    for dir_node in step.extraConfig["partial_directories"]:
+      dirs.add(config.directories.root / dir_node.getStr)
+
+  for dir in dirs:
+    if dir.dirExists:
+      for path in walkDirRec(dir):
+        if path.endsWith(".mustache"):
+          let name = path.relativePath(dir).changeFileExt("")
+          if name notin result:
+            result[name] = readFile(path)
+
+proc run(step: Step, state: State) =
   let
     stepGlob = step.glob("*.mustache")
     src_dir = state.config.directories.src
+    partials = load_partials(step, state.config)
+
+  # Materialize the context once for the whole step; item and items are
+  # the only per-page keys, and rebinding them on the same tree is cheap.
+  var context = state.context.toJson
 
   var failed: seq[string] = @[]
 
-  # Read each template once, however many pages it expands to. Only the
-  # source string is cached: parsed tokens cannot be reused, because
-  # toAst mutates the token refs while building sections — rendering a
-  # cached token seq twice duplicates section children.
-  var sources = initTable[string, string]()
+  # Compile each template once, however many pages it expands to.
+  var compiled = initTable[string, CompiledTemplate]()
 
   state.ensure_render_filter(step)
 
@@ -42,24 +62,6 @@ proc run(step: Step, state: State) =
       if not destination_path.parentDir.dirExists():
         destination_path.parentDir.createDir()
 
-      context["debug"] = proc (s: string, c: Context): string =
-        return $c[ s.strip ]
-      context["length"] = proc (s: string, c: Context): string =
-        try:
-          let value = c[ s ]
-          case value.kind
-          of vkInt,vkFloat32,vkFloat64,vkBool:
-            return ""
-          of vkString:
-            return $value.vString.len
-          of vkSeq:
-            return $value.vSeq.len
-          of vkTable:
-            return $value.vTable.len
-          else:
-            return "0"
-        except KeyError:
-          return "0"
       context["item"] = render_item.item
       context["items"] = render_item.items
 
@@ -67,9 +69,10 @@ proc run(step: Step, state: State) =
       # the site still builds; the failures surface as one error at the
       # end of the step, so a build still fails overall.
       try:
-        if render_item.source_path notin sources:
-          sources[render_item.source_path] = readFile(absolute_path)
-        write_file(destination_path, sources[render_item.source_path].render(context))
+        if render_item.source_path notin compiled:
+          compiled[render_item.source_path] = compile_template(readFile(absolute_path))
+        write_file(destination_path,
+                   compiled[render_item.source_path].render(context, partials))
         state.rendered_outputs.add(render_item.output_path)
       except CatchableError as e:
         error "Failed rendering ", render_item.source_path, " -> ",
