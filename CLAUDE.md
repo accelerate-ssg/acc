@@ -20,9 +20,9 @@ nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/config.nim
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on test/test_cli.nim
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on test/render_paths.nim
 
-# Run liquid library tests (from liquid/ directory)
+# Run template engine tests (from the pitchfork/ directory)
 nim c -r -p:src src/liquid_lib.nim
-nim c -r -p:src src/liquid/vm.nim
+nim c -r -p:src src/mustache_lib.nim
 ```
 
 Required system dependencies (macOS):
@@ -78,11 +78,15 @@ Accelerate (Acc) is a static site generator implemented in Nim. It uses a workfl
 - `run_workflow.nim` checks the plugin registry before hardcoded module dispatch
 - New engines can be added by implementing the plugin interface and calling `registerEngine`
 
-**Liquid Engine** (`../liquid/`):
-- Full Liquid template engine: lexer -> compiler -> bytecode VM
-- Library API in `liquid/src/liquid_lib.nim` accepts `JsonNode` context
-- JSON bridge (`liquid/src/liquid/json_bridge.nim`) converts `JsonNode` <-> `VMValue`
-- Supports pre-compilation via `CompiledTemplate` for reuse
+**Template Engine** (`../pitchfork/`):
+- One bytecode VM with per-language frontends ("tines") under `pitchfork/tines/`
+- Both built-in engines run on it: `liquid_lib.nim` and `mustache_lib.nim` are
+  the per-language convenience APIs, each accepting a `JsonNode` context
+- The Liquid API also renders lazily against an arena context store, so context
+  reads are tracked by node identity rather than by dotted path
+- Both support pre-compilation via `CompiledTemplate` for reuse
+- Partials are passed in as a name -> source table; acc collects them from the
+  step's search and partial directories, resolved against the project root
 
 **Script Execution** (`src/script/ducktape.nim`):
 - Duktape JavaScript runtime integration for running JS-based build steps
@@ -93,9 +97,14 @@ Accelerate (Acc) is a static site generator implemented in Nim. It uses a workfl
 ### Dependencies
 
 Dependencies are vendored in `deps/` directory, including:
-- NimYAML, docopt, glob, mustache, markdown, regex, cligen
+- NimYAML, docopt, glob, markdown, regex, cligen
 - No external fswatch library needed (native implementation)
-- Liquid template engine is a sibling project at `../liquid/` (path configured in `src/nim.cfg`)
+- No external mustache library needed (pitchfork renders both languages)
+
+Two sibling projects are used by path (configured in `src/nim.cfg`, and declared
+by git URL in `acc.nimble`):
+- `../pitchfork/` — the template engine
+- `../arena_context_store/` — the build context store
 
 ### Build Pipeline Flow
 
