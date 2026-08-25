@@ -80,22 +80,22 @@ jobs:
       - name: Build executable (Linux)
         if: runner.os == 'Linux'
         run: |
-          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release
+          nimble build -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on -d:release
 
       - name: Build executable (macOS ARM64)
         if: matrix.os == 'macos-latest'
         run: |
-          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:arm64
+          nimble build -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:arm64
 
       - name: Build executable (macOS x86)
         if: matrix.os == 'macos-15-intel'
         run: |
-          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:amd64
+          nimble build -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:amd64
 
       - name: Build executable (Windows)
         if: runner.os == 'Windows'
         run: |
-          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release --passC:-Wno-incompatible-pointer-types
+          nimble build -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on -d:release --passC:-Wno-incompatible-pointer-types
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
