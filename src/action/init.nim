@@ -32,12 +32,21 @@ workflows:
 proc is_empty( path: string ): bool =
   result = true
   for file in path.walk_dir:
+    # A stale structured-log artifact: older binaries dropped a 0-byte
+    # accelerate.json into the cwd on every invocation, which made
+    # `acc init .` fail here against a file acc itself had written.
+    if file.path.splitPath.tail == "accelerate.json": continue
     result = false
     break
 
 proc init*( state: State ) =
   let root = state.config.directories.root
   info "Initializing new project in ", root
+
+  # Initializing a directory that does not exist yet is fine — create it
+  # rather than failing later at the config write.
+  if root != "" and not root.dir_exists:
+    root.create_dir
 
   if root == "" or root.is_empty:
     let dirs = state.config.directories

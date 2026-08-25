@@ -17,6 +17,9 @@ type
   OutputTarget* = object
     format*: OutputFormat
     stream*: Stream
+    path*: string             ## For file-backed targets: opened lazily on
+                              ## first flush, so a run that never writes
+                              ## structured output leaves no file behind.
     enabled*: bool
 
   LogEntry* = object

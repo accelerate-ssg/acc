@@ -11,10 +11,11 @@ proc initLogger*(outputs: seq[OutputTarget]): StructuredLogger =
 proc initLogger*(logFilePath: string): StructuredLogger =
   var outputs: seq[OutputTarget] = @[]
 
-  # JSON output to file
-  let jsonStream = newFileStream(logFilePath, fmWrite)
-  if jsonStream != nil:
-    outputs.add(OutputTarget(format: ofJson, stream: jsonStream, enabled: true))
+  # JSON output to file. The stream is opened lazily on first flush:
+  # opening it here ran at module import, which dropped a 0-byte
+  # accelerate.json into whatever directory any acc command was run
+  # from — and made `acc init .` fail its own empty-directory check.
+  outputs.add(OutputTarget(format: ofJson, path: logFilePath, enabled: true))
 
   result = initLogger(outputs)
 
