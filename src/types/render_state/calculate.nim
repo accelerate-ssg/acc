@@ -16,7 +16,8 @@ proc calculate_render_state*( cfg: Config, steps: seq[Step], store: ContextStore
 
   for file in file_list:
     result = result.concat(
-      store.calculate_render_state_items_for( file )
+      store.calculate_render_state_items_for( file,
+        legacy_paths = cfg.legacyPaths )
     )
 
   warn "[CALCULATE_RENDER_STATE]", $result.map( ( x ) => x.output_path )

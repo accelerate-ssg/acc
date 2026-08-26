@@ -258,7 +258,8 @@ proc materialize_all(arena: Arena, nodes: seq[NodeId]): JsonNode =
 
 proc calculate_render_state_items_for*(
   store: ContextStore,
-  source_path: string
+  source_path: string,
+  legacy_paths: bool = false
 ): seq[RenderStateItem] =
   result = @[]
 
@@ -312,8 +313,23 @@ proc calculate_render_state_items_for*(
 
         continue
 
-      let
+      var
         binding = segment.binding.get()
+        (found, entries) = source_entries(store.arena, frame, store.root, binding)
+
+      if not found and legacy_paths and not binding.scoped and
+          binding.filter.isNone and binding.selector.attribute.len == 0 and
+          binding.collection.len >= 2:
+        # Legacy grammar: `{a.b}` tried the context path a.b first and
+        # fell back to grouping collection `a` by attribute `b` — the
+        # spelling the new grammar writes as `{a[b]}`.
+        binding = Binding(
+          scoped: false,
+          collection: binding.collection[0 ..< ^1],
+          filter: none(Filter),
+          selector: Selector(
+            attribute: @[binding.collection[^1]], flatten: false),
+        )
         (found, entries) = source_entries(store.arena, frame, store.root, binding)
 
       if not found:
@@ -365,7 +381,8 @@ proc calculate_render_state_items_for*(
 
 proc calculate_render_state_items_for*(
   context: JsonNode,
-  source_path: string
+  source_path: string,
+  legacy_paths: bool = false
 ): seq[RenderStateItem] =
   ## JsonNode compatibility overload: loads the context into a transient
   ## arena and routes against it. This is the entry point the router spec
@@ -373,4 +390,4 @@ proc calculate_render_state_items_for*(
   var store = newContextStore()
   if not context.isNil:
     store.root = store.arena.fromJson(context)
-  store.calculate_render_state_items_for(source_path)
+  store.calculate_render_state_items_for(source_path, legacy_paths)

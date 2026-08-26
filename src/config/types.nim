@@ -39,6 +39,11 @@ type
 
   Config* = object
     manifestVersion*: string
+    legacyPaths*: bool        ## Set by the pre-0.2 config converter: route
+                              ## templates with the legacy path grammar,
+                              ## where `{a.b}` falls back to grouping
+                              ## collection `a` by attribute `b` when no
+                              ## context node exists at path `a.b`.
     action*: Action
     logLevel*: LogLevel
     runWorkflow*: string
