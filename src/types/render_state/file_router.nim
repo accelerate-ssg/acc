@@ -256,10 +256,25 @@ proc materialize_all(arena: Arena, nodes: seq[NodeId]): JsonNode =
   for node in nodes:
     result.add(arena.toJson(node))
 
+type RootItemCache* = ref object
+  ## Memoizes the root-scope compatibility copy across one render-state
+  ## calculation. Every STATIC template's item is the enclosing scope —
+  ## the whole context (spec C26) — and materializing that per file made
+  ## render-state calculation allocate context-size × static-file-count:
+  ## an asset-heavy 450-template site churned 23GB, and a 1900-template
+  ## multilingual one was OOM-killed. The copy is read-only for engines,
+  ## so one calculation pass can share a single instance.
+  json: JsonNode
+  filled: bool
+
+proc newRootItemCache*(): RootItemCache =
+  RootItemCache()
+
 proc calculate_render_state_items_for*(
   store: ContextStore,
   source_path: string,
-  legacy_paths: bool = false
+  legacy_paths: bool = false,
+  root_cache: RootItemCache = nil
 ): seq[RenderStateItem] =
   result = @[]
 
@@ -294,9 +309,18 @@ proc calculate_render_state_items_for*(
           # routing itself, so they are built unattributed. The nodes
           # carry the real identity.
           var item_json, items_json: JsonNode
+          let cacheable = root_cache != nil and
+            frame.scope == @[store.root] and frame.elements.len == 0
           store.untracked:
-            item_json = materialize(store.arena, frame.scope)
-            items_json = materialize_all(store.arena, frame.elements)
+            if cacheable:
+              if not root_cache.filled:
+                root_cache.json = materialize(store.arena, frame.scope)
+                root_cache.filled = true
+              item_json = root_cache.json
+              items_json = newJArray()
+            else:
+              item_json = materialize(store.arena, frame.scope)
+              items_json = materialize_all(store.arena, frame.elements)
           result.add(init_render_state_item(
             source_path = source_path,
             output_path = joined & ".html",

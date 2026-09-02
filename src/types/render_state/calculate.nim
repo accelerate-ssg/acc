@@ -14,10 +14,13 @@ proc calculate_render_state*( cfg: Config, steps: seq[Step], store: ContextStore
 
   result = @[]
 
+  # One shared root-item copy per calculation — see RootItemCache.
+  let root_cache = newRootItemCache()
+
   for file in file_list:
     result = result.concat(
       store.calculate_render_state_items_for( file,
-        legacy_paths = cfg.legacyPaths )
+        legacy_paths = cfg.legacyPaths, root_cache = root_cache )
     )
 
   warn "[CALCULATE_RENDER_STATE]", $result.map( ( x ) => x.output_path )
