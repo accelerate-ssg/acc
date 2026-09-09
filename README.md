@@ -122,6 +122,53 @@ one.
 1. Place the binary in your path, for instance in `~/bin`.
 2. Install pcre. With brew: `brew install pcre`
 
+## Usage
+
+```sh
+acc build [ROOT_DIR]    # run the build workflow once
+acc dev [ROOT_DIR]      # build, then watch and serve on port 1331
+acc run <workflow>      # run a single named workflow
+acc clean               # remove generated output
+```
+
+### Selective builds
+
+By default `acc build` walks the whole source tree and renders everything.
+On a site with a lot of pages that is wasteful when only a handful of files
+have actually changed, so the build can instead be told what changed and
+render only the pages affected by it.
+
+`--using` picks how to find the changes:
+
+```sh
+acc build --using=git --since=origin/main
+```
+
+That asks git for everything that differs between `origin/main` and the
+working tree - including untracked files - and builds only what those
+changes affect. It is the mode a CI or deploy server wants: the baseline is
+whatever the site looked like when it was last published, so a branch that
+touches one content file rebuilds one page.
+
+`--since` takes any ref git understands and defaults to `HEAD`, which means
+"uncommitted work only". The strategy requires the project root to be a git
+repository.
+
+The other strategies are `--using=mtime`, which rebuilds files modified
+since the previous build's timestamp, and `--using=full` (the default),
+which rebuilds everything.
+
+Note that a change Acc cannot trace to individual pages - a partial, the
+config, anything outside the tracked dependencies - still triggers a full
+rebuild, whichever strategy found it.
+
+### Build cache
+
+Selective builds and `--using=mtime` build on the persisted build context,
+which Acc saves to the work directory after every build and reloads on the
+next one. It carries the previous build's dependency knowledge and
+timestamp. Pass `--no-cache` to neither load nor save it.
+
 ## Development
 
 Clone then run using `nimble -d:debug -d:nimDebugDlOpen -p:src --threads:on
