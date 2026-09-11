@@ -39,3 +39,4 @@ test/context_store
 test/arena_loading
 test/change_sets
 test/path_router_spec
+test/legacy_config
