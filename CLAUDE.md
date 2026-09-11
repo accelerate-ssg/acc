@@ -14,6 +14,7 @@ nimble build -d:release -p:src --threads:on --mm:orc --deepcopy:on
 # Run tests (inline unit tests in source files)
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/types/render_state/file_router.nim
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/types/render_state/file_list.nim
+nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/page_context.nim
 
 # Run standalone test suites
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/config.nim
@@ -77,6 +78,11 @@ Accelerate (Acc) is a static site generator implemented in Nim. It uses a workfl
 - Built-in engines: `mustache_engine.nim` (`.mustache`), `liquid_engine.nim` (`.liquid`)
 - `run_workflow.nim` checks the plugin registry before hardcoded module dispatch
 - New engines can be added by implementing the plugin interface and calling `registerEngine`
+- Every engine binds the same per-page context keys, defined in
+  `src/page_context.nim`: `item`, `items`, and `page` (currently `page.path`,
+  the URL the page is served at, derived from its output path). Those names are
+  reserved — a content file that would bind one of them is warned about by the
+  YAML loader, since the render pass overwrites it.
 
 **Template Engine** (`../pitchfork/`):
 - One bytecode VM with per-language frontends ("tines") under `pitchfork/tines/`

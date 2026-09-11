@@ -7,6 +7,7 @@ import global_state
 import config
 import arena_context_store
 import action/internal_functions/[step_helpers, key_stack]
+import page_context
 
 proc yamlToJson*(data: string): JsonNode =
   ## Parse YAML content. NimYAML parses a superset of JSON, so this also
@@ -40,6 +41,14 @@ proc registerContentLoaders*() =
 proc parse(stack: var KeyStack, absolute_path: string, relative_path: string) =
   stack.mark()
   stack.add_file_path(relative_path)
+  # The render pass binds these keys per page, so a file loaded at one of
+  # them is shadowed in every template. Loading it anyway keeps the build
+  # working for anything reading it by a longer path, but the file is not
+  # reachable under its own name.
+  if stack.atoms.len == 1 and stack.atoms[0] in RESERVED_CONTEXT_KEYS:
+    warn "Content file ", relative_path, " binds the reserved context key '",
+      stack.atoms[0], "'; templates will see the value the render pass ",
+      "sets there instead. Rename the file or nest it under a directory."
   # One consumer per file: its write set is what a change to this file
   # invalidates. Loading merges into any subtree already bound at the
   # path, so on a reload only the nodes that actually changed in the

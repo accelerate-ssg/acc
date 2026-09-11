@@ -9,6 +9,7 @@ import logger
 import plugins/shared_types
 import action/internal_functions/step_helpers
 import render_filter
+import page_context
 
 proc load_partials(step: Step, config: Config): Table[string, string] =
   ## Load the partials a template can reference, keyed the way it
@@ -41,8 +42,9 @@ proc run(step: Step, state: State) =
     src_dir = state.config.directories.src
     partials = load_partials(step, state.config)
 
-  # Materialize the context once for the whole step; item and items are
-  # the only per-page keys, and rebinding them on the same tree is cheap.
+  # Materialize the context once for the whole step; item, items and page
+  # are the only per-page keys, and rebinding them on the same tree is
+  # cheap.
   var context = state.context.toJson
 
   var failed: seq[string] = @[]
@@ -64,6 +66,7 @@ proc run(step: Step, state: State) =
 
       context["item"] = render_item.item
       context["items"] = render_item.items
+      context["page"] = %*{"path": url_path(render_item.output_path)}
 
       # A page that fails to render is logged and skipped so the rest of
       # the site still builds; the failures surface as one error at the

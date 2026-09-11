@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A page's own URL in the template context as `page.path`, in both the Mustache and Liquid engines. Derived from the page's routed output path — `.html` stripped, a trailing `index` collapsed, leading slash, no trailing slash — so `index.html` is `/`, `om-oss/film.html` is `/om-oss/film`, and a dynamic template follows the slug it was routed by rather than its own filename. This lets a shared `head` partial default the canonical URL to `{{general.url}}{{page.path}}` instead of every page hand-writing a `slug:` field, where a forgotten override silently claimed the site root. The `$url` block stays overridable, for pages served at a path `acc` cannot see (an internal nginx rewrite).
+- `page`, alongside `item` and `items`, is now a reserved top-level context key: the render pass binds it per page. The content loader warns when a content file would bind one of them, instead of the file being silently shadowed as it was before.
 - Arena-backed build context: the context tree lives in `arena_context_store` instead of a `JsonNode` tree, with per-file origins and an always-on access log. Every context read is attributed to the consumer that made it.
 - Incremental rebuilds: a change reaches only the pages that read the data it touched. Reloading a content file merges node by node, so editing one post in a shared file re-renders that post's page and nothing else.
 - Change-set strategies chosen by the caller: `acc build --using=git --since=REF` (diff plus untracked files, renames as remove+change), `--using=mtime` against the cached build stamp, and the default full walk. The dev server feeds watcher events through the same classifier.

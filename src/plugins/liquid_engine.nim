@@ -10,6 +10,7 @@ import action/internal_functions/step_helpers
 import render_filter
 import arena_context_store
 import liquid_lib
+import page_context
 
 proc load_partials(step: Step, config: Config): Table[string, string] =
   ## Load partial template files from the source directory and any
@@ -86,6 +87,13 @@ proc run(step: Step, state: State) =
         for node in render_item.items_nodes:
           items.arrayVal.add(wrap_arena_node(state.context.arena, node))
         overlays["items"] = items
+        # Eager, not an arena node: the value is derived from this page's
+        # own route, so it is not a context read to attribute to anything.
+        var page = VMValue(kind: vmObject,
+                           objectVal: initOrderedTable[string, VMValue]())
+        page.objectVal["path"] = VMValue(
+          kind: vmString, stringVal: url_path(render_item.output_path))
+        overlays["page"] = page
 
         let output = compiled[render_item.source_path].render(
           state.context.arena, state.context.root, overlays, partials)

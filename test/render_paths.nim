@@ -6,6 +6,7 @@ import config
 import types/render_state
 import types/render_state/file_list
 import types/render_state/file_router
+import page_context
 
 # ============================================================================
 # File Router Tests - all rendering path combinations
@@ -294,3 +295,59 @@ suite "File list - partial directories":
 
     check bare.init_partial_globs().len == 0
     check not bare.is_partial("partials/head.liquid")
+
+
+# ============================================================================
+# Page path - the URL a routed page is served at, as templates see it
+# ============================================================================
+
+suite "Page path":
+
+  test "a root template serves at its own name":
+    let ctx = %* {"blommor": {"title": "Blommor"}}
+    let results = ctx.calculate_render_state_items_for("blommor.mustache")
+    check results.map((r) => url_path(r.output_path)) == @["/blommor"]
+
+  test "a root index serves at the site root":
+    let ctx = %* {}
+    let results = ctx.calculate_render_state_items_for("index.mustache")
+    check results.map((r) => url_path(r.output_path)) == @["/"]
+
+  test "a nested template keeps its directory":
+    let ctx = %* {}
+    let results = ctx.calculate_render_state_items_for("om-oss/film.mustache")
+    check results.map((r) => url_path(r.output_path)) == @["/om-oss/film"]
+
+  test "a nested index serves at its directory":
+    let ctx = %* {}
+    let results = ctx.calculate_render_state_items_for("om-oss/index.mustache")
+    check results.map((r) => url_path(r.output_path)) == @["/om-oss"]
+
+  test "a dynamic template follows the bound slug, not the filename":
+    let ctx = %* {"pages": {
+      "first": {"slug": "forsta-sidan"},
+      "second": {"slug": "andra-sidan"},
+    }}
+    let results = ctx.calculate_render_state_items_for("{pages[slug]}.mustache")
+    check results.map((r) => url_path(r.output_path)) ==
+      @["/forsta-sidan", "/andra-sidan"]
+
+  test "a dynamic key match names the page after the key":
+    let ctx = %* {"pages": {"first": {}, "second": {}}}
+    let results = ctx.calculate_render_state_items_for("nyheter/{pages}.mustache")
+    check results.map((r) => url_path(r.output_path)) ==
+      @["/nyheter/first", "/nyheter/second"]
+
+  test "a dynamic segment resolving to index collapses like a static one":
+    let ctx = %* {"pages": {"a": {"slug": "index"}}}
+    let results = ctx.calculate_render_state_items_for("om-oss/{pages[slug]}.mustache")
+    check results.map((r) => url_path(r.output_path)) == @["/om-oss"]
+
+  test "the engines are given the same value for the same page":
+    # Both engines derive from output_path alone, so routing an equivalent
+    # liquid template must produce the same URL as the mustache one.
+    let ctx = %* {}
+    let mustache = ctx.calculate_render_state_items_for("om-oss/film.mustache")
+    let liquid = ctx.calculate_render_state_items_for("om-oss/film.liquid")
+    check mustache.map((r) => url_path(r.output_path)) ==
+      liquid.map((r) => url_path(r.output_path))

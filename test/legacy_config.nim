@@ -3,6 +3,7 @@ import std/[unittest, json, sequtils, sugar]
 import config
 import types/render_state
 import types/render_state/file_router
+import page_context
 
 suite "legacy config conversion":
   const LEGACY = """
@@ -93,3 +94,9 @@ suite "legacy path grammar":
     let results = ctx.calculate_render_state_items_for(
       "produkter/{manufacturers.path}.mustache")
     check results.len == 0
+
+  test "a legacy-routed page still knows its own URL":
+    let results = ctx.calculate_render_state_items_for(
+      "produkter/{manufacturers.path}.mustache", legacy_paths = true)
+    check results.map((r) => url_path(r.output_path)) ==
+      @["/produkter/kubota", "/produkter/wrag"]
