@@ -32,8 +32,22 @@ proc flushLog*() =
   clearClosedSections(logger.root)
 
 proc closeLogger*() =
-  if logger != nil:
+  ## Best effort, because this runs as an exit proc: a logger whose streams a
+  ## caller already closed, or a half-built section tree, must not turn
+  ## process shutdown into a crash. Nothing useful can be reported at this
+  ## point anyway — the console target has already printed everything.
+  if logger == nil or logger.root == nil:
+    return
+  try:
     flushLog()
-    for target in logger.outputs:
-      if target.stream != nil:
+  except CatchableError:
+    discard
+  for target in logger.outputs.mitems:
+    if target.stream != nil:
+      try:
         target.stream.close()
+      except CatchableError:
+        discard
+      # Cleared, not just closed: a closed FileStream is still non-nil, and
+      # writing to one is a segfault rather than a catchable error.
+      target.stream = nil

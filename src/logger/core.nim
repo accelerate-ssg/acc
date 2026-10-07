@@ -9,15 +9,19 @@ proc initLogger*(outputs: seq[OutputTarget]): StructuredLogger =
   initLock(result.lock)
 
 proc initLogger*(logFilePath: string): StructuredLogger =
-  var outputs: seq[OutputTarget] = @[]
-
-  # JSON output to file. The stream is opened lazily on first flush:
-  # opening it here ran at module import, which dropped a 0-byte
-  # accelerate.json into whatever directory any acc command was run
-  # from — and made `acc init .` fail its own empty-directory check.
-  outputs.add(OutputTarget(format: ofJson, path: logFilePath, enabled: true))
-
-  result = initLogger(outputs)
+  ## No output target by default, whatever path is named.
+  ##
+  ## A file target used to be registered here, with its stream opened lazily
+  ## so that merely importing the module did not drop a 0-byte
+  ## accelerate.json into whatever directory acc ran from — which also made
+  ## `acc init .` fail its own empty-directory check (49c3fde). Lazy opening
+  ## hid that, but only because nothing ever flushed; now that closeLogger
+  ## runs at exit, an enabled file target would write that file again.
+  ##
+  ## So the default is console only, and a file is something a caller asks
+  ## for with addOutput. The parameter is kept for the existing callers.
+  discard logFilePath
+  result = initLogger(newSeq[OutputTarget]())
 
 proc addOutput*(target: OutputTarget) =
   withLock logger.lock:

@@ -81,6 +81,10 @@ proc init_logger*() =
 logger = initLogger("accelerate.json")
 
 addExitProc(resetAttributes)
+# Flush and close whatever outputs were configured. Without this, a
+# file-backed target never opened its stream, so a configured JSON or HTML
+# log stayed empty however much was logged.
+addExitProc(closeLogger)
 enableTrueColors()
 
 when not defined(release):
@@ -189,6 +193,9 @@ when not defined(release):
 
       # Close the stream so we can read the file
       jsonStream.close()
+      # Closed above, so drop them from the global logger: an exit-time
+      # flush into a closed stream is a segfault.
+      logger = initLogger(newSeq[OutputTarget]())
       let content = readFile(tmpFile)
       let parsed = parseJson(content)
       assert parsed["name"].getStr == "root"
@@ -210,6 +217,9 @@ when not defined(release):
       flushLog()
 
       htmlStream.close()
+      # Closed above, so drop it from the global logger: an exit-time
+      # flush into a closed stream is a segfault.
+      logger = initLogger(newSeq[OutputTarget]())
       let content = readFile(tmpFile)
       assert content.contains("<!DOCTYPE html>")
       assert content.contains("Accelerate Build Report")
@@ -235,6 +245,9 @@ when not defined(release):
 
       jsonStream.close()
       htmlStream.close()
+      # Closed above, so drop them from the global logger: an exit-time
+      # flush into a closed stream is a segfault.
+      logger = initLogger(newSeq[OutputTarget]())
 
       let jsonContent = parseJson(readFile(jsonFile))
       assert jsonContent["entries"][0]["message"].getStr == "Multi-output test"

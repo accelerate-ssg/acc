@@ -1,3 +1,12 @@
+proc record(level: LogLevel, label, message: string) =
+  ## Mirror a console line into the structured log, so a configured JSON or
+  ## HTML target receives the same messages the terminal shows. The templates
+  ## render the terminal line themselves rather than going through log()'s
+  ## real-time path, so the label travels as metadata instead of being
+  ## reformatted.
+  if logger != nil:
+    log(level, message, %*{"label": label.strip()})
+
 template with_label(default_label: string, parts: varargs[string], body: untyped) =
   var
     message {.inject.} = parts.join( "" )
@@ -17,26 +26,31 @@ template notice*( parts: varargs[string, `$`] ) =
   if log_level <= lvlNotice:
     with_label(" [INFO]", parts):
       colored_printline( BLUE, label, message);
+      record(lvlNotice, label, message)
 
 template info*( parts: varargs[string, `$`] ) =
   if log_level <= lvlInfo:
     with_label("    [i]", parts):
       colored_printline( BLUE, label, message);
+      record(lvlInfo, label, message)
 
 template warn*( parts: varargs[string, `$`] ) =
   if log_level <= lvlWarn:
     with_label(" [WARN]", parts):
       colored_printline( ORANGE, label, message);
+      record(lvlWarn, label, message)
 
 template error*( parts: varargs[string, `$`] ) =
   if log_level <= lvlError:
     with_label("[ERROR]", parts):
       colored_printline( RED, label, message);
+      record(lvlError, label, message)
 
 template fatal*(parts: varargs[string, `$`]) =
   if log_level <= lvlFatal:
     with_label("[FATAL]", parts):
       colored_printline(DARK_RED, label, message)
+      record(lvlFatal, label, message)
 
 template debug*( parts: varargs[string, `$`] ) =
   if log_level <= lvlDebug:
