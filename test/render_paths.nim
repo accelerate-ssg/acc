@@ -351,3 +351,44 @@ suite "Page path":
     let liquid = ctx.calculate_render_state_items_for("om-oss/film.liquid")
     check mustache.map((r) => url_path(r.output_path)) ==
       liquid.map((r) => url_path(r.output_path))
+
+
+# ============================================================================
+# Scoped selectors over a grouped collection
+# ============================================================================
+
+suite "Nested dynamic segment over a group":
+
+  let ctx = %* {"products": [
+    {"cat": "muffins", "slug": "a"},
+    {"cat": "muffins", "slug": "b"},
+    {"cat": "solo",    "slug": "c"},
+  ]}
+
+  test "every element gets a page, whatever its group size":
+    # The count is a property of the data, not of the route: a category
+    # with one product must behave like a category with three.
+    let results = ctx.calculate_render_state_items_for(
+      "{products[cat]}/{.[slug]}.mustache")
+    check results.map((r) => r.output_path) ==
+      @["muffins/a.html", "muffins/b.html", "solo/c.html"]
+
+  test "the page of a one-element group binds that element":
+    let results = ctx.calculate_render_state_items_for(
+      "{products[cat]}/{.[slug]}.mustache")
+    let solo = results.filterIt(it.output_path == "solo/c.html")
+    check solo.len == 1
+    check solo[0].item["slug"].getStr == "c"
+
+  test "a scoped selector still reaches a single bound element":
+    let single = %* {"pages": {"only": {"slug": "s"}}}
+    let results = single.calculate_render_state_items_for(
+      "{pages}/{.[slug]}.mustache")
+    check results.map((r) => r.output_path) == @["only/s.html"]
+
+  test "a scoped binding with no selector is unchanged":
+    # {.} without a selector still lists the enclosing scope's own keys.
+    let single = %* {"pages": {"only": {"a": 1, "b": 2}}}
+    let results = single.calculate_render_state_items_for(
+      "{pages}/{.}.mustache")
+    check results.map((r) => r.output_path) == @["only/a.html", "only/b.html"]

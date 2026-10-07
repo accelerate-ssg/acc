@@ -173,6 +173,17 @@ proc source_entries(arena: Arena, frame: Frame, root: NodeId,
   var source = InvalidNodeId
   if binding.scoped:
     if binding.collection.len == 0:
+      # A selector names each element by one of its attributes, so the
+      # collection is whatever the enclosing binding contributed — however
+      # many that is. A group of one is still a group: letting the count
+      # decide would make the route depend on how many rows happen to
+      # share a grouping value, so adding a second product to a category
+      # would make its sibling's page appear.
+      if binding.selector.attribute.len > 0 and frame.elements.len > 0:
+        result.found = true
+        for index, element in frame.elements:
+          result.entries.add(($index, element))
+        return
       if frame.scope.len > 1:
         # The merged group acts as the collection.
         result.found = true
