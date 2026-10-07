@@ -1,5 +1,5 @@
 ## The per-page context keys the template engines inject, and the names
-## that reserves.
+## that injection reserves.
 ##
 ## Content files are bound at a top-level key taken from their filename
 ## (see key_stack.add_file_path), so a file named after one of these keys

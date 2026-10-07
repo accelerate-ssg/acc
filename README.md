@@ -117,7 +117,7 @@ one.
 
 ## Installation
 
-### MacOS
+### macOS
 
 1. Place the binary in your path, for instance in `~/bin`.
 2. Install pcre. With brew: `brew install pcre`

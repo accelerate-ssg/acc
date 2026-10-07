@@ -79,4 +79,4 @@ workflows:
   - name: "deploy"
     steps:
       - comment: "Deploy to GKE"
-        command: "{ for i in kubernets/*.yaml ; do echo '---' ; envsubst < $i ; done; } | kubectl apply -f -"
+        command: "{ for i in kubernetes/*.yaml ; do echo '---' ; envsubst < $i ; done; } | kubectl apply -f -"
