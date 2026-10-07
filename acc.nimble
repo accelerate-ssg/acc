@@ -26,9 +26,10 @@ requires "ws >= 0.5.0"           # dev server live reload
 # that keep them as siblings compile against those working copies instead —
 # see the paths in src/nim.cfg.
 
-# The build context store.
-requires "git+ssh://git@github.com/accelerate-ssg/arena.git#v0.1.1"
+# The build context store. NOTE: this repository is still private, so a fetch
+# needs credentials until it is made public — CI cannot install it yet.
+requires "https://github.com/accelerate-ssg/arena.git#v0.1.1"
 
 # The template engine: one bytecode VM with per-language frontends, backing
 # both the @liquid and @mustache modules.
-requires "git+ssh://git@github.com/accelerate-ssg/pitchfork.git#v0.3.1"
+requires "https://github.com/accelerate-ssg/pitchfork.git#v0.3.1"
