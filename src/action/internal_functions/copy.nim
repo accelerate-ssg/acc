@@ -45,3 +45,8 @@ proc run*(step: Step) =
         destination_path.parent_dir.create_dir()
 
       copy_asset(absolute_path, destination_path)
+      # A copied asset is an output like a rendered page, so it belongs in
+      # the build manifest. Recorded after the skip above, which means the
+      # manifest stays a delta: an asset that did not need copying is not
+      # one a deploy needs to transfer.
+      state.rendered_outputs.add(relative_path)

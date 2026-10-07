@@ -48,6 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed file router test cases to use correct relative paths (matching production file_list behavior).
 - Percent-encoded request paths are decoded by the dev server, so pages with non-ASCII names are served instead of 404ing (ported from the legacy line).
 - The development server no longer serves pages in quirks mode. The live reload script is injected after `<!DOCTYPE html>` instead of before it, so layout in `acc dev` matches what `acc build` produces (ported from the legacy line).
+- The build manifest lists copied assets, not only rendered pages. `@copy`
+  wrote files without recording them in `rendered_outputs`, which is what
+  `manifest.json` is built from, so every image, font, stylesheet and script
+  was missing from it — on a small site, 4 entries for 31 output files. The
+  manifest stays a delta: an asset skipped because it was already up to date
+  is still omitted, since a deploy does not need to transfer it. Nothing
+  consumes the manifest yet, so no deployment was affected.
 - A scoped selector over a grouped collection expands a group of one. `{products[cat]}/{.[slug]}.mustache` only produced pages for categories holding two or more products, because the enclosing scope was treated as a collection only when it held more than one element; a single-element group was dug into for its fields instead. Routing therefore depended on how many rows happened to share a grouping value, so adding a second product to a category made its sibling's page appear.
 
 ### Reconciled with the legacy development line
