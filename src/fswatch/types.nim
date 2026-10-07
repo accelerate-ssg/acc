@@ -5,7 +5,7 @@ type
   Event* = object
     case kind*: EventKind
     of etOther:
-      eventName: string
+      eventName*: string
     of etCreate, etModify, etDelete, etRename, etAttributeChange:
       discard
     path*: string
