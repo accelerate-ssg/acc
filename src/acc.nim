@@ -21,12 +21,22 @@ proc showMe(aspect: string) =
   of "config":
     echo pretty(%state.config)
   of "files":
-    # Find the build workflow (or first workflow with steps)
+    # The leaf named "build" is the one whose file list is interesting.
+    # Taking the first leaf unconditionally picked whatever happened to be
+    # declared earliest — a content sync or preprocess workflow, whose steps
+    # carry no glob — and reported an empty list for a config that routes
+    # hundreds of pages. Fall back to the first leaf only if there is no
+    # "build".
     var steps: seq[Step] = @[]
     for wf in state.config.workflows:
-      if wf.isLeaf:
+      if wf.isLeaf and wf.name == "build":
         steps = wf.steps
         break
+    if steps.len == 0:
+      for wf in state.config.workflows:
+        if wf.isLeaf:
+          steps = wf.steps
+          break
     if steps.len > 0:
       let files = init_file_list(state.config, steps, init_source_files(state.config))
       echo pretty(%*files)
