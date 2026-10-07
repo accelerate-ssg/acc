@@ -18,7 +18,9 @@ proc calculate_render_state*( cfg: Config, steps: seq[Step], store: ContextStore
   let root_cache = newRootItemCache()
 
   for file in file_list:
-    result = result.concat(
+    # add, not concat: concat builds a fresh seq holding everything routed
+    # so far on every file, which is quadratic in the number of pages.
+    result.add(
       store.calculate_render_state_items_for( file,
         legacy_paths = cfg.legacyPaths, root_cache = root_cache )
     )
