@@ -158,11 +158,14 @@ The other strategies are `--using=mtime`, which rebuilds files modified
 since the previous build's timestamp, and `--using=full` (the default),
 which rebuilds everything.
 
-`--using=mtime` cannot see deletions on its own - a timestamp scan only
-finds files that still exist - so removals come from the manifest in the
-persisted build context. Run it with `--no-cache` and deleted pages will
-linger in the output; `--using=git` reports removals directly and does
-not have this limitation.
+`--using=mtime` needs the cache: the timestamp it compares against is the
+previous build's, which is stored there, so `--using=mtime --no-cache`
+reports that there is no baseline yet and exits without building.
+
+It also cannot see deletions on its own - a timestamp scan only finds
+files that still exist - so removals come from the manifest in the
+persisted build context. Use `--using=git` where removals matter; it
+reports them directly.
 
 Note that a change Acc cannot trace to individual pages - a partial, the
 config, anything outside the tracked dependencies - still triggers a full
