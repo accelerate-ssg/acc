@@ -9,7 +9,7 @@ import plugins/shared_types
 import action/internal_functions/step_helpers
 import render_filter
 import arena_context_store
-import liquid_lib
+import pitchfork/liquid_lib
 import page_context
 
 proc load_partials(step: Step, config: Config): Table[string, string] =

@@ -1,6 +1,6 @@
 import std/[os, json, strutils, tables]
 import glob
-import mustache_lib
+import pitchfork/mustache_lib
 
 import global_state
 import config
