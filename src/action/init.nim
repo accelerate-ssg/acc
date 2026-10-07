@@ -63,5 +63,7 @@ proc init*( state: State ) =
       notice "Created configuration file: ", config_path
     except IOError as e:
       error "Failed to create configuration file: ", e.msg
+      quit(1)
   else:
     error "Directory is not empty. Please choose an empty directory."
+    quit(1)
