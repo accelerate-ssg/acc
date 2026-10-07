@@ -31,4 +31,4 @@ requires "git+ssh://git@github.com/accelerate-ssg/arena.git#v0.1.1"
 
 # The template engine: one bytecode VM with per-language frontends, backing
 # both the @liquid and @mustache modules.
-requires "git+ssh://git@github.com/accelerate-ssg/pitchfork.git#v0.2.1"
+requires "git+ssh://git@github.com/accelerate-ssg/pitchfork.git#v0.3.1"
