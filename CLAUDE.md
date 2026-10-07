@@ -50,8 +50,12 @@ Accelerate (Acc) is a static site generator implemented in Nim. It uses a workfl
 **Workflow & Step System** (`src/config/types.nim`):
 - `Workflow` contains steps or references to sub-workflows, with optional `if` conditionals
 - `Step` can be a `module` (built-in), `script` (external), or `command` (shell)
-- Steps have optional `dependsOn`, `timeout`, and `onFailure` fields
-- Workflows can run in parallel with `maxConcurrent` control
+- Steps have optional `dependsOn`, `timeout`, and `onFailure` fields. Only
+  `onFailure` is implemented (`continue` downgrades a failed step to a
+  warning); `dependsOn` and `timeout` are parsed and then ignored — steps
+  run in declaration order and are never timed out
+- `parallel` and `maxConcurrent` on a workflow are likewise parsed and
+  ignored; a composition runs its sub-workflows in sequence
 
 **Configuration** (`src/config/`):
 - YAML config parsed with sections for directories and workflows

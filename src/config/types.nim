@@ -8,22 +8,32 @@ type
     lvlWarn, lvlError, lvlFatal, lvlNone
 
   Step* = object
+    ## Accepted and not yet implemented: `dependsOn` and `timeout` are
+    ## parsed, validated and serialized, but run_workflow.nim runs steps in
+    ## declaration order and never times one out. A config setting either is
+    ## silently inert — on purpose, so a config written for a later version
+    ## still loads, but it means neither can be relied on today.
     comment*: string
     script*: string
     command*: string
     module*: string
     arguments*: seq[string]
-    dependsOn*: seq[string]
-    timeout*: Option[string]
-    onFailure*: Option[string]
+    dependsOn*: seq[string]      ## accepted, not yet implemented
+    timeout*: Option[string]     ## accepted, not yet implemented
+    onFailure*: Option[string]   ## "continue" turns a failed step into a
+                                 ## warning; any other value, or none, lets
+                                 ## the failure stop the workflow
     extraConfig*: JsonNode
 
   Workflow* = object
+    ## Accepted and not yet implemented: `parallel` and `maxConcurrent` are
+    ## parsed and serialized, but a composition runs its sub-workflows in
+    ## sequence regardless. Same caveat as the Step settings above.
     name*: string
     `if`*: string
     env*: seq[string]
-    parallel*: bool
-    maxConcurrent*: int
+    parallel*: bool              ## accepted, not yet implemented
+    maxConcurrent*: int          ## accepted, not yet implemented
     steps*: seq[Step]
     workflows*: seq[string]
 
