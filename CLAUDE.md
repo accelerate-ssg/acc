@@ -94,8 +94,12 @@ Accelerate (Acc) is a static site generator implemented in Nim. It uses a workfl
 - Partials are passed in as a name -> source table; acc collects them from the
   step's search and partial directories, resolved against the project root
 
-**Script Execution** (`src/script/ducktape.nim`):
-- Duktape JavaScript runtime integration for running JS-based build steps
+**Script Execution** (`src/modules/script_runner/`):
+- Script steps run through a dynamically loaded runner library, not an
+  in-process interpreter: `loader.nim` opens it, `types.nim` is the ABI,
+  `runner.nim` wraps the calls
+- The library is optional — a build without it logs "Failed to load script
+  runner" and carries on, so a site with no script steps needs nothing
 
 **Logger** (`src/logger.nim`):
 - Multi-format structured logger with color support
