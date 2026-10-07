@@ -240,6 +240,44 @@ workflows:
     let workflow = config.workflows[0]
     check workflow.env == @["APP=myapp", "REGION=eu"]
 
+  test "Interpolation resolves array indices":
+    let yamlStr = """
+manifest_version: v1
+domains:
+  - "example.se"
+  - "example.accodeing.dev"
+meta:
+  hosts:
+    - name: "primary"
+workflows:
+  - name: "deploy"
+    env:
+      - "PROD=${domains[0]}"
+      - "DEV=${domains[1]}"
+      - "NESTED=${meta.hosts[0].name}"
+    steps:
+      - command: "deploy.sh"
+"""
+    let config = loadConfig(yamlStr)
+    check config.workflows[0].env ==
+      @["PROD=example.se", "DEV=example.accodeing.dev", "NESTED=primary"]
+
+  test "Interpolation leaves an out-of-range or non-numeric index alone":
+    let yamlStr = """
+manifest_version: v1
+domains:
+  - "example.se"
+workflows:
+  - name: "deploy"
+    env:
+      - "A=${domains[9]}"
+      - "B=${domains[x]}"
+    steps:
+      - command: "deploy.sh"
+"""
+    let config = loadConfig(yamlStr)
+    check config.workflows[0].env == @["A=${domains[9]}", "B=${domains[x]}"]
+
   test "Interpolation with missing key leaves placeholder":
     let yamlStr = """
 manifest_version: v1

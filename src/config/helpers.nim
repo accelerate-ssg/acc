@@ -1,15 +1,45 @@
 proc getGenericConfig*(config: Config, path: varargs[string]): JsonNode =
+  ## Walks the passthrough config by path. A segment addressing an array is
+  ## its index, so `domains[0]` arrives here as @["domains", "0"] — see
+  ## split_config_path.
   result = config.genericConfig
   for key in path:
     if result.kind == JObject and result.hasKey(key):
       result = result[key]
+    elif result.kind == JArray:
+      try:
+        let index = key.parseInt
+        if index < 0 or index >= result.len:
+          return newJNull()
+        result = result[index]
+      except ValueError:
+        return newJNull()
     else:
       return newJNull()
+
+proc split_config_path*(path: string): seq[string] =
+  ## Splits an interpolation path into the segments getGenericConfig walks.
+  ## Dots separate object keys and a trailing `[n]` is an array index, so
+  ## `domains[0]` becomes @["domains", "0"] and `a.b[1].c` becomes
+  ## @["a", "b", "1", "c"]. Several indices in a row are allowed.
+  result = @[]
+  for atom in path.split("."):
+    var name = atom
+    var indices: seq[string] = @[]
+    while name.len > 0 and name[^1] == ']':
+      let open = name.rfind('[')
+      if open < 0:
+        break
+      indices.insert(name[open + 1 ..< name.high], 0)
+      name = name[0 ..< open]
+    if name.len > 0:
+      result.add(name)
+    result.add(indices)
 
 proc interpolate(value: string, config: Config): string =
   result = value
   for match in value.findAll(re"\$\{([^}]+)\}"):
-    let path = match[2..^2].split(".")
+    let path = split_config_path(match[2..^2])
     let replacement = config.getGenericConfig(path).getStr(match)
     result = result.replace(match, replacement)
 
