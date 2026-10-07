@@ -26,8 +26,7 @@ requires "ws >= 0.5.0"           # dev server live reload
 # that keep them as siblings compile against those working copies instead —
 # see the paths in src/nim.cfg.
 
-# The build context store. NOTE: this repository is still private, so a fetch
-# needs credentials until it is made public — CI cannot install it yet.
+# The build context store.
 requires "https://github.com/accelerate-ssg/arena.git#v0.1.1"
 
 # The template engine: one bytecode VM with per-language frontends, backing
