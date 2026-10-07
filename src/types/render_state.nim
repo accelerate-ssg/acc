@@ -58,6 +58,11 @@ proc init_render_state_item*(
   key: string = "",
   parent: JsonNode = nil
 ): RenderStateItem =
+  ## Re-points an existing routed item at a new output path, item and items.
+  ## The node sequences come across too: they are the arena identities the
+  ## Liquid engine reads live data through and the router attributes a page's
+  ## dependencies to, so a copy that dropped them would silently downgrade
+  ## the page to the materialized JsonNode snapshot.
   init_render_state_item(
     source_path = render_state_item.source_path,
     output_path = output_path,
@@ -65,5 +70,7 @@ proc init_render_state_item*(
            item = item,
           items = items,
             key = key,
-         parent = parent
+         parent = parent,
+     item_nodes = render_state_item.item_nodes,
+    items_nodes = render_state_item.items_nodes
   )

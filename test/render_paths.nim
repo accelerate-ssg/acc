@@ -7,6 +7,7 @@ import types/render_state
 import types/render_state/file_list
 import types/render_state/file_router
 import page_context
+import arena_context_store
 
 # ============================================================================
 # File Router Tests - all rendering path combinations
@@ -392,3 +393,23 @@ suite "Nested dynamic segment over a group":
     let results = single.calculate_render_state_items_for(
       "{pages}/{.}.mustache")
     check results.map((r) => r.output_path) == @["only/a.html", "only/b.html"]
+
+
+suite "Render state item copy":
+
+  test "re-pointing an item keeps its arena node identities":
+    # The node sequences are what Liquid reads live data through; a copy
+    # that dropped them would fall back to the JsonNode snapshot silently.
+    let original = init_render_state_item(
+      source_path = "a.mustache",
+      output_path = "a.html",
+      render = true,
+      item_nodes = @[NodeId(7)],
+      items_nodes = @[NodeId(7), NodeId(8)])
+    let copied = init_render_state_item(
+      original, output_path = "b.html",
+      item = original.item, items = original.items)
+    check copied.item_nodes == @[NodeId(7)]
+    check copied.items_nodes == @[NodeId(7), NodeId(8)]
+    check copied.output_path == "b.html"
+    check copied.source_path == "a.mustache"
