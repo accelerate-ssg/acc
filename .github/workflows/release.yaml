@@ -97,11 +97,26 @@ jobs:
         run: |
           nimble build -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on -d:release --passC:-Wno-incompatible-pointer-types
 
+      # Renamed before upload, not merely placed in a per-platform directory:
+      # a GitHub release is a flat namespace, so three artifacts all called
+      # `acc` collide there. The release action keeps one and appends a
+      # content hash to the rest, which is where assets like
+      # acc-48d984d64309c7b2ae31626e3c4f8659 in v0.2.2 came from — nobody
+      # downloading can tell which platform they are for.
+      - name: Name the binary for its platform
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            mv ./acc.exe ./${{ matrix.artifact_name }}
+          else
+            mv ./acc ./${{ matrix.artifact_name }}
+          fi
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: ./acc${{ runner.os == 'Windows' && '.exe' || '' }}
+          path: ./${{ matrix.artifact_name }}
 
   create-release:
     needs: build
@@ -142,7 +157,7 @@ jobs:
           automatic_release_tag: "${{ steps.prepare_release.outputs.TAG_NAME }}"
           title: "${{ steps.prepare_release.outputs.RELEASE_NAME }}"
           files: |
-            ./acc-linux/acc
-            ./acc-osx-arm64/acc
-            ./acc-osx-x86/acc
-            ./acc-windows.exe/acc.exe
+            ./acc-linux/acc-linux
+            ./acc-osx-arm64/acc-osx-arm64
+            ./acc-osx-x86/acc-osx-x86
+            ./acc-windows.exe/acc-windows.exe
