@@ -89,9 +89,8 @@ proc renderHtmlSection*(section: LogSection, depth: int = 0): string =
     result.add "</details>\n</div>\n"
 
 proc flushHtml*(logger: StructuredLogger, target: OutputTarget) =
-  ## Rewound for the same reason as flushJson: the whole report is rendered
-  ## each time, so appending would stack documents.
+  ## Writes the whole report; flushLog has already replaced the target's
+  ## contents. Same reasoning as flushJson.
   let html = renderHtmlSection(logger.root)
-  target.stream.setPosition(0)
   target.stream.write(html)
   target.stream.flush()

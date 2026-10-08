@@ -230,6 +230,32 @@ when not defined(release):
       assert content.contains("level-error")
       removeFile(tmpFile)
 
+    test "A shrinking render replaces the file, leaving no tail":
+      # The whole log is rendered each flush and clearClosedSections
+      # prunes closed sections, so a later flush can be shorter than an
+      # earlier one. Rewinding alone would leave the longer write's tail.
+      let tmpFile = getTempDir() / "test_logger_shrink.json"
+      logger = initLogger(@[
+        OutputTarget(format: ofJson, path: tmpFile, enabled: true)
+      ])
+
+      startSection("a long section name that makes the first render big")
+      for n in 0 .. 40:
+        log(lvlInfo, "padding entry " & $n)
+      endSection()
+      flushLog()
+      let first = readFile(tmpFile).len
+
+      # The closed section is pruned, so this render is much smaller.
+      flushLog()
+      let second = readFile(tmpFile)
+      assert second.len < first
+      discard parseJson(second)
+
+      closeLogger()
+      logger = initLogger(newSeq[OutputTarget]())
+      removeFile(tmpFile)
+
     test "Flushing twice leaves one parsable document":
       let tmpFile = getTempDir() / "test_logger_twice.json"
       let jsonStream = newFileStream(tmpFile, fmWrite)

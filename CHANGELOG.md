@@ -65,10 +65,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   roots, so `GET /../../../../etc/passwd` read whatever the process could —
   and the server listens on every interface, not just loopback, so anyone who
   could reach port 1331 could do it. Each candidate path is now made absolute,
-  normalized and checked to be inside the root it was built from, which
-  handles `..`, an absolute request path and symlinks without enumerating
-  spellings. Verified with a canary file: served before, 404 after, with
-  normal pages unaffected.
+  normalized, has its symlinks resolved where it exists, and is checked to be
+  inside the root it was built from — which handles `..`, an absolute request
+  path, and a symlink pointing out of the tree. A symlink *within* the tree
+  still works. Verified with canary files for both the dot-segment and the
+  symlink route: served before, 404 after, with normal pages unaffected.
 - The Windows file watcher observes every configured path, one thread per
   watch, instead of only the first. `acc dev` registers a source watch and a
   content watch, so content edits were never seen on Windows. Untested on

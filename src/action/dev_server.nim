@@ -106,18 +106,32 @@ proc context_as_json(): string {.gcsafe.} =
   {.cast(gcsafe).}:
     result = $state.context
 
+proc resolved(path: string): string =
+  ## Absolute and normalized, and with symlinks resolved where the path
+  ## exists. normalizedPath is purely lexical, so it collapses `..` but
+  ## follows a symlink without noticing: a link inside the served root
+  ## pointing at /etc would pass a lexical check and then be read.
+  ## expandFilename needs the path to exist, hence the guard — most
+  ## candidates do not exist, and for those lexical is all there is and all
+  ## that is needed, since nothing will be read from them.
+  result = path.absolutePath.normalizedPath
+  try:
+    if result.fileExists or result.dirExists:
+      result = result.expandFilename
+  except OSError, CatchableError:
+    discard
+
 proc is_contained_in(candidate, root: string): bool =
   ## Does `candidate` resolve to something inside `root`?
   ##
-  ## Both sides are made absolute and normalized first, so `..` is collapsed
-  ## rather than matched on, and the comparison is against `root & DirSep` so
-  ## a sibling directory sharing a prefix — `/site/publicX` against a root of
-  ## `/site/public` — is not mistaken for a child.
+  ## The comparison is against `root & DirSep` so a sibling sharing a prefix
+  ## — `/site/publicX` against a root of `/site/public` — is not mistaken
+  ## for a child.
   if root.len == 0:
     return false
   let
-    full_root = root.absolutePath.normalizedPath
-    full_candidate = candidate.absolutePath.normalizedPath
+    full_root = root.resolved
+    full_candidate = candidate.resolved
   full_candidate == full_root or
     full_candidate.startsWith(full_root & $DirSep)
 
@@ -136,29 +150,37 @@ proc process_request( request: Request, root_dir: string, source_root: string ) 
     about_context = request.url.path == "/about:context"
     # Browsers percent-encode non-ASCII paths; the files on disk are not.
     request_path = decodeUrl(request.url.path)
-    paths = [
-      root_dir / request_path,
-      root_dir / request_path / "index.html",
-      root_dir / request_path & ".html",
-      source_root / request_path
+    # Each candidate carries the root it was built from. Pairing them is not
+    # decoration: deriving the root afterwards by testing which one the
+    # candidate starts with gets it wrong whenever one root is a prefix of
+    # the other (a destination of `public/out` under a source of `public`),
+    # and checks against the wider of the two.
+    candidates = [
+      (root_dir, root_dir / request_path),
+      (root_dir, root_dir / request_path / "index.html"),
+      (root_dir, root_dir / request_path & ".html"),
+      (source_root, source_root / request_path)
     ]
 
-  for local_path in paths:
-    # Containment check, not a pattern check: the decoded path is attacker
-    # controlled, so a candidate is only served when it actually resolves
-    # inside the root it was built from. Comparing the absolute, normalized
-    # candidate against the absolute root catches `..`, a path that is
-    # already absolute, and anything a symlink would otherwise reach,
-    # without this code having to enumerate the spellings.
-    let root = if local_path.startsWith(source_root): source_root else: root_dir
+  var refused = false
+  for (root, local_path) in candidates:
+    # Containment, not pattern matching: the decoded path is attacker
+    # controlled, so a candidate is served only when it actually resolves
+    # inside its own root. That covers `..`, an already-absolute request
+    # path, and a symlink leaving the tree, without enumerating spellings.
     if not local_path.is_contained_in(root):
-      warn "Refusing path outside the served roots: ", request_path
+      refused = true
       continue
     path = local_path
     existing_file = fileExists(path)
     if existing_file:
       debug "Serving: ", path
       break
+
+  # One line per request, not one per candidate: there are four candidates,
+  # so a single probe used to log four warnings.
+  if refused and not existing_file:
+    warn "Refusing path outside the served roots: ", request_path
 
   if about_context:
     headers["content-type"] = "application/json; charset=utf-8"

@@ -8,9 +8,23 @@ proc getFullLog*(): JsonNode =
 proc flushLog*() =
   for target in logger.outputs.mitems:
     if not target.enabled: continue
-    # File-backed targets open on first flush (see OutputTarget.path).
-    if target.stream == nil and target.path.len > 0:
+    # Every flush renders the whole log, so the target has to be *replaced*,
+    # not appended to and not overwritten in place. Reopening with fmWrite
+    # truncates, which matters because the render can shrink: the
+    # clearClosedSections pass below drops closed sections, so a later flush
+    # is often shorter than an earlier one, and rewinding alone would leave
+    # the tail of the longer write behind — a file that parses as neither one
+    # document nor two.
+    #
+    # A target constructed with a stream rather than a path cannot be
+    # truncated through FileStream, so it is only rewound. The tests do that;
+    # acc itself always configures a path.
+    if target.path.len > 0:
+      if target.stream != nil:
+        try: target.stream.close() except CatchableError: discard
       target.stream = newFileStream(target.path, fmWrite)
+    elif target.stream != nil:
+      target.stream.setPosition(0)
     case target.format
     of ofJson:
       if target.stream != nil:
