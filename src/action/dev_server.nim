@@ -247,10 +247,18 @@ proc watch_for_changes(channel: ptr Channel[Event]) {.async.} =
       changed = initOrderedSet[string]()
       removed = initOrderedSet[string]()
     for event in events:
-      if event.kind == etDelete:
-        removed.incl(absolutePath(event.path))
+      let full = absolutePath(event.path)
+      # A rename arrives as two events, the old path and the new one — on
+      # inotify and the Windows backend as a matter of course. Classifying
+      # both as changes left the vanished old path out of `removed`, so the
+      # output its template used to produce stayed on disk. Existence is what
+      # separates them, and it is also the right test for a delete that a
+      # watcher reported as something else.
+      if event.kind == etDelete or
+         not (full.fileExists or full.dirExists):
+        removed.incl(full)
       else:
-        changed.incl(absolutePath(event.path))
+        changed.incl(full)
 
     debug "Change detected: ", (changed.toSeq & removed.toSeq).join(", ")
     rebuild(ChangeSet(changed: changed.toSeq, removed: removed.toSeq))

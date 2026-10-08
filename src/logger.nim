@@ -230,6 +230,28 @@ when not defined(release):
       assert content.contains("level-error")
       removeFile(tmpFile)
 
+    test "Flushing twice leaves one parsable document":
+      let tmpFile = getTempDir() / "test_logger_twice.json"
+      let jsonStream = newFileStream(tmpFile, fmWrite)
+      logger = initLogger(@[
+        OutputTarget(format: ofJson, stream: jsonStream, enabled: true)
+      ])
+
+      log(lvlInfo, "first")
+      flushLog()
+      log(lvlInfo, "second")
+      flushLog()
+
+      jsonStream.close()
+      # Closed above, so drop it from the global logger: an exit-time
+      # flush into a closed stream is a segfault.
+      logger = initLogger(newSeq[OutputTarget]())
+      # Appending would make this two JSON objects back to back, and
+      # parseJson would reject the file.
+      let parsed = parseJson(readFile(tmpFile))
+      assert parsed["name"].getStr == "root"
+      removeFile(tmpFile)
+
     test "Multiple outputs simultaneously":
       let jsonFile = getTempDir() / "test_multi.json"
       let htmlFile = getTempDir() / "test_multi.html"
