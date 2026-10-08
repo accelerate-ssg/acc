@@ -190,6 +190,18 @@ is the binary to build/run and the arguments to it.
 
 `nimble build -d:release -p:src --threads:on --mm:orc --deepcopy:on`
 
+Do not add `-d:useMalloc`. It routes Nim's allocator to the system `malloc`,
+and on musl that makes acc about 2.1x slower: the same 270-page site renders in
+5.25s with the flag against 2.47s without, as the median of six cold
+`--no-cache` builds over identical input. Without the flag musl and glibc are
+indistinguishable - 2.47s against 2.53s - so the cost is the allocator swap and
+not the libc. musl's mallocng is tuned for low fragmentation and a small
+resident set rather than for the allocation churn a render pass produces.
+
+This bites Alpine-based build images in particular, since musl is where the
+flag both gets added and costs the most. Reach for it to make a memory bug
+legible to valgrind, and drop it again afterwards.
+
 ## Releasing
 
 Releases use semantic versioning with git tags (e.g., `v1.0.0`, `v1.2.3`).
