@@ -41,12 +41,23 @@ workflows:
 """
 
 proc is_empty( path: string ): bool =
+  ## Transitional: a zero-byte accelerate.json does not count as content.
+  ##
+  ## Up to 0.2.1 the logger registered a file target by default and dropped
+  ## that file into whatever directory acc ran from, so `acc init .` failed
+  ## against a file acc itself had written. 0.2.2 registers no default
+  ## target and writes nothing, but those binaries are still installed and
+  ## still in the build image, so the leftovers are real and this stays
+  ## until they are gone.
+  ##
+  ## Only an empty one is skipped. A non-empty accelerate.json is something
+  ## the user put there — a configured log, or an unrelated file — and
+  ## initializing over it would lose it.
   result = true
   for file in path.walk_dir:
-    # A stale structured-log artifact: older binaries dropped a 0-byte
-    # accelerate.json into the cwd on every invocation, which made
-    # `acc init .` fail here against a file acc itself had written.
-    if file.path.splitPath.tail == "accelerate.json": continue
+    if file.path.splitPath.tail == "accelerate.json" and
+       file.path.getFileSize == 0:
+      continue
     result = false
     break
 
