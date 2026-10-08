@@ -61,8 +61,9 @@ proc loadWorkflow(workflow: YamlNode, config: Config): Workflow =
     name: safeInterpolateStr(safeGet(workflow, "name"), config),
     `if`: safeInterpolateStr(safeGet(workflow, "if"), config),
     env: safeInterpolateSeq(safeGet(workflow, "env"), config),
-    parallel: if safeGet(workflow, "parallel").isSome: safeGet(workflow, "parallel").get.content == "true" else: false,
-    maxConcurrent: if safeGet(workflow, "max_concurrent").isSome: safeGet(workflow, "max_concurrent").get.content.parseInt else: 1,
+    parallel: safeInterpolateStr(safeGet(workflow, "parallel"), config, "false") == "true",
+    maxConcurrent: safeParseInt(safeGet(workflow, "max_concurrent"), config, 1,
+                                "max_concurrent"),
   )
 
   if safeGet(workflow, "steps").isSome:

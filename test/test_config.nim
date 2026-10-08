@@ -240,6 +240,31 @@ workflows:
     let workflow = config.workflows[0]
     check workflow.env == @["APP=myapp", "REGION=eu"]
 
+  test "A malformed parallel or max_concurrent is a config-shape error":
+    # Reading .content off a non-scalar is a FieldDefect, which is not a
+    # CatchableError and so escaped the CLI handler as a crash.
+    for bad in ["    parallel:\n      a: 1",
+                "    max_concurrent:\n      - 2",
+                "    max_concurrent: \"not-a-number\""]:
+      let yamlStr = "manifest_version: v1\nworkflows:\n  - name: \"build\"\n" &
+        bad & "\n    steps:\n      - command: \"x\"\n"
+      expect ConfigShapeError:
+        discard loadConfig(yamlStr)
+
+  test "A well-formed parallel and max_concurrent still load":
+    let yamlStr = """
+manifest_version: v1
+workflows:
+  - name: "build"
+    parallel: true
+    max_concurrent: 4
+    steps:
+      - command: "x"
+"""
+    let wf = loadConfig(yamlStr).workflows[0]
+    check wf.parallel
+    check wf.maxConcurrent == 4
+
   test "Interpolation resolves array indices":
     let yamlStr = """
 manifest_version: v1

@@ -81,6 +81,24 @@ proc safeGet(node: YamlNode, key: string): Option[YamlNode] =
   except KeyError:
     return none(YamlNode)
 
+proc safeParseInt(node: Option[YamlNode], config: Config, default: int,
+                  field: string): int =
+  ## An integer field, validated the way safeInterpolateStr validates a
+  ## string. Reading .content off a mapping or a list is a FieldDefect, which
+  ## is not a CatchableError and so escapes the CLI's handler as a crash
+  ## rather than the config-shape error the loader promises.
+  if node.isNone:
+    return default
+  if node.get.kind != yScalar:
+    raise newException(ConfigShapeError,
+      "'" & field & "' expected a number, got " & describeKind(node.get))
+  let text = interpolate(node.get.content, config)
+  try:
+    text.parseInt
+  except ValueError:
+    raise newException(ConfigShapeError,
+      "'" & field & "' expected a number, got '" & text & "'")
+
 proc safeInterpolateStr(node: Option[YamlNode], config: Config, default: string = ""): string =
   if node.isSome:
     if node.get.kind != yScalar:
