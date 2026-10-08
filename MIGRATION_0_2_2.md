@@ -7,26 +7,28 @@ config is split out into `acc.yaml` while Heimr's fields stay in `config.yaml`,
 and the compatibility shim in `file_router.nim` is left to die once nothing needs
 it.
 
-Site scope and build comparisons re-verified 2026-10-07.
+Site scope and build comparisons re-verified 2026-10-08, against the
+released 0.2.2.
 
 ## On the version number
 
 `0.2.2`, and it is worth knowing why it is not `0.2.0` or `0.2.1`.
 
-Nothing in the 0.2 line has ever been released. The last release tag is
+Nothing in the 0.2 line had ever been released. The last release tag was
 `v0.1.1`; `CHANGELOG.md` headed its top section `[0.2.0] - Unreleased`,
-while `acc.nimble` has drifted to `0.2.1` — `b37382c` bumped it *"so local
+while `acc.nimble` had drifted to `0.2.1` — `b37382c` bumped it *"so local
 installs need to distinguish patched from unpatched binaries"*, which is a
 working-version bump, not a release.
 
 The consequence is that binaries calling themselves `0.2.0` and `0.2.1`
 already exist (`~/bin/acc-0.2.0`, `~/bin/acc-0.2.1`), and they are **not** what
-we are about to ship — `page.path`, the router group-of-one fix and pitchfork
-0.3.0 all landed after them. Reusing either number would put two different
+was shipped — `page.path`, the router group-of-one fix and pitchfork 0.4.0
+all landed after them. Reusing either number would have put two different
 builds behind one version string. `0.2.2` is the first unburned number.
 
-At release time: bump `acc.nimble` to `0.2.2`, retitle the changelog's
-`[0.2.0] - Unreleased` section to `[0.2.2] - <date>`, tag `v0.2.2`.
+Done: `acc.nimble` reads `0.2.2`, the changelog section is
+`[0.2.2] - 2026-10-08`, and `v0.2.2` is tagged on `main` — which was reset to
+the 0.2 line first, so the release comes off `main` as it should.
 
 ## The flow, and the window it opens
 
@@ -345,7 +347,8 @@ Two oddities found while splitting, neither blocking:
 
 ## Verification
 
-Re-verified **2026-10-07**. Every site built twice — `~/bin/acc` with its
+Re-verified **2026-10-08** against the released 0.2.2. Every site built
+twice — the pre-0.2 binary (now `~/bin/acc-0.1.1`) with its
 current `config.yaml` (what production serves today) against the 0.2.2 candidate
 with all renames and the config split, no `-c` — each into its own tree, with no
 site working copy written to. Compared whitespace-normalised, since 0.2 indents
@@ -382,6 +385,9 @@ Re-run per site with:
 ```
 rsync -a --exclude .git --exclude public --exclude .acc <site>/ /tmp/m/<site>/
 cd /tmp/m/<site> && mv config.yaml acc.yaml && acc build .
+
+# the pre-0.2 baseline, for comparison, still reads config.yaml:
+~/bin/acc-0.1.1 build .
 ```
 
 ### bokbageriet.se is already on the new convention
@@ -434,18 +440,11 @@ ending `.mustache`, so a `.html`-template site that *used* partials would not
 find them. liveaboard.yachts has none, so it is clean; flagged in case another
 site adopts the pattern.
 
-Re-run per site with:
-
-```
-rsync -a --exclude .git --exclude public --exclude .acc <site>/ /tmp/m/<site>/
-cd /tmp/m/<site> && acc build . -c config.yaml
-```
-
 ## Engine changes this release depends on
 
 All three have landed.
 
-- **pitchfork v0.3.1** — released 2026-10-07; `acc.nimble` requires it as of
+- **pitchfork v0.4.0** — `acc.nimble` requires it as of `b9a3752`; v0.3.1 as of
   `ce3c4b5`. Carries the Mustache section truthiness change, the
   `mustache#block` split that keeps an override rendering to nothing from
   falling back to its block default, and the nested same-named loop fix (an
