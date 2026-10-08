@@ -1,6 +1,6 @@
 # Package
 
-version = "0.2.2"
+version = "0.2.3"
 author = "Jonas Schubert Erlandsson, Hannes Elvemyr"
 description = "The Acc static site tools"
 license = "GPL-3.0"

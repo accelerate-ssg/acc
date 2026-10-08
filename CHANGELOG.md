@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-10-08
+
+Packaging only. The source tree is identical to 0.2.2, so there is no
+behaviour change and the fleet output verified against 0.2.2 still holds.
+
+### Fixed
+
+- Release assets are named for the platform they were built for. All four
+  matrix jobs uploaded their binary as plain `acc` (`acc.exe` on Windows), and
+  a GitHub release is a flat namespace, so the three Unix builds collided in
+  it: the release action keeps the first and appends a content hash to the
+  rest. v0.2.2 therefore shipped `acc`,
+  `acc-48d984d64309c7b2ae31626e3c4f8659` and
+  `acc-6d9145401579a37159f6c0f5ecae6de1`, and nothing short of running one
+  revealed which platform it was for. Each job now renames its binary to the
+  matrix artifact name before upload, so a release carries `acc-linux`,
+  `acc-osx-arm64`, `acc-osx-x86` and `acc-windows.exe`. That is what lets a
+  consumer pin a download URL rather than compile acc itself — the
+  `build-accelerate` Docker image drops its Nim toolchain stage because of it.
+
 ## [0.2.2] - 2026-10-08
 
 ### Added
