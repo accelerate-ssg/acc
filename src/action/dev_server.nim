@@ -106,6 +106,21 @@ proc context_as_json(): string {.gcsafe.} =
   {.cast(gcsafe).}:
     result = $state.context
 
+proc is_contained_in(candidate, root: string): bool =
+  ## Does `candidate` resolve to something inside `root`?
+  ##
+  ## Both sides are made absolute and normalized first, so `..` is collapsed
+  ## rather than matched on, and the comparison is against `root & DirSep` so
+  ## a sibling directory sharing a prefix — `/site/publicX` against a root of
+  ## `/site/public` — is not mistaken for a child.
+  if root.len == 0:
+    return false
+  let
+    full_root = root.absolutePath.normalizedPath
+    full_candidate = candidate.absolutePath.normalizedPath
+  full_candidate == full_root or
+    full_candidate.startsWith(full_root & $DirSep)
+
 proc process_request( request: Request, root_dir: string, source_root: string ) {.async, gcsafe.} =
   var
     path: string
@@ -129,6 +144,16 @@ proc process_request( request: Request, root_dir: string, source_root: string ) 
     ]
 
   for local_path in paths:
+    # Containment check, not a pattern check: the decoded path is attacker
+    # controlled, so a candidate is only served when it actually resolves
+    # inside the root it was built from. Comparing the absolute, normalized
+    # candidate against the absolute root catches `..`, a path that is
+    # already absolute, and anything a symlink would otherwise reach,
+    # without this code having to enumerate the spellings.
+    let root = if local_path.startsWith(source_root): source_root else: root_dir
+    if not local_path.is_contained_in(root):
+      warn "Refusing path outside the served roots: ", request_path
+      continue
     path = local_path
     existing_file = fileExists(path)
     if existing_file:

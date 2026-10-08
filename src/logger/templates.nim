@@ -1,11 +1,16 @@
-proc record(level: LogLevel, label, message: string) =
+proc record(level: LogLevel, label, message: string) {.gcsafe.} =
   ## Mirror a console line into the structured log, so a configured JSON or
   ## HTML target receives the same messages the terminal shows. The templates
   ## render the terminal line themselves rather than going through log()'s
   ## real-time path, so the label travels as metadata instead of being
   ## reformatted.
-  if logger != nil:
-    log(level, message, %*{"label": label.strip()})
+  # Cast, as context_as_json in the dev server does: the logger is a global,
+  # so touching it is not provably gcsafe, but log() does its work under
+  # logger.lock. Without this, adding a warn to any {.gcsafe.} proc — the
+  # dev server's request handler, a watcher thread — stops compiling.
+  {.cast(gcsafe).}:
+    if logger != nil:
+      log(level, message, %*{"label": label.strip()})
 
 template with_label(default_label: string, parts: varargs[string], body: untyped) =
   var

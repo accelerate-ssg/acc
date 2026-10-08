@@ -48,6 +48,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed file router test cases to use correct relative paths (matching production file_list behavior).
 - Percent-encoded request paths are decoded by the dev server, so pages with non-ASCII names are served instead of 404ing (ported from the legacy line).
 - The development server no longer serves pages in quirks mode. The live reload script is injected after `<!DOCTYPE html>` instead of before it, so layout in `acc dev` matches what `acc build` produces (ported from the legacy line).
+- The dev server no longer serves files outside the directories it is given.
+  The decoded request path was joined straight onto the destination and source
+  roots, so `GET /../../../../etc/passwd` read whatever the process could —
+  and the server listens on every interface, not just loopback, so anyone who
+  could reach port 1331 could do it. Each candidate path is now made absolute,
+  normalized and checked to be inside the root it was built from, which
+  handles `..`, an absolute request path and symlinks without enumerating
+  spellings. Verified with a canary file: served before, 404 after, with
+  normal pages unaffected.
 - The Windows file watcher compiles. `include fswatch/file-change-notification`
   is not a legal Nim include — the dashes made it `Cannot use '-' in 'include'`
   — and behind that the backend had ten type errors: every Win32 constant was
