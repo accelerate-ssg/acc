@@ -29,8 +29,10 @@ src/**
 # macOS
 .DS_Store
 
-# Built binary at repo root
+# Built binary at repo root, and the scratch copies a verification run
+# makes with -o: (nim c -o:acc-native, -o:acc-lg, ...)
 /acc
+/acc-*
 
 # Compiled test binaries
 test/render_paths
