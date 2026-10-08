@@ -217,3 +217,22 @@ suite "Arena loading - reload precision":
     let stale = state.context.arena.invalidatedBy(loader)
     check router in stale       # it iterated the array, which grew
     check pageFirst notin stale # its post did not change
+
+
+suite "Content parsing routes by extension":
+
+  test ".json and .yaml give the same tree for the same data":
+    let data = """{"a": 1, "b": {"c": [1, 2]}}"""
+    check contentToJson("x.json", data) == contentToJson("x.yaml", data)
+
+  test "an empty .json file loads as an empty array, not a parse error":
+    # The YAML path rendered an empty stream as [], and std/json raises on
+    # empty input; a content file that loaded before must keep loading.
+    check contentToJson("x.json", "") == newJArray()
+    check contentToJson("x.json", "   \n ") == newJArray()
+
+  test ".json takes the std/json path, .yaml still accepts YAML":
+    # Unquoted keys are YAML, not JSON: proof the extension decides.
+    check contentToJson("x.yaml", "a: 1")["a"].getInt == 1
+    expect JsonParsingError:
+      discard contentToJson("x.json", "a: 1")

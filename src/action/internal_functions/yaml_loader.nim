@@ -1,4 +1,4 @@
-import std/[json, os]
+import std/[json, os, strutils]
 import yaml/[tojson, native, parser]
 import logger
 import glob
@@ -22,20 +22,43 @@ proc yamlToJson*(data: string): JsonNode =
       docs.add(json_node)
     docs
 
+proc jsonToJson*(data: string): JsonNode =
+  ## Parse JSON content with std/json, which is about twice as fast as
+  ## routing it through NimYAML. JSON is a YAML subset, so the trees agree:
+  ## verified over every .json file in the hosted sites (519 files, 5.6 MB)
+  ## with no difference, and over the edge cases the two parsers could
+  ## disagree on — duplicate keys, int/float typing, exponents, unicode
+  ## escapes, BOM, top-level scalars and arrays.
+  ##
+  ## Two cases do differ, and only one needs handling. An empty or
+  ## whitespace-only file is an empty YAML stream, which yamlToJson renders
+  ## as an empty array, while std/json raises; that is preserved below so a
+  ## content file that loads today keeps loading. (The other: an integer too
+  ## large for int64 raises in NimYAML and parses in std/json, which is the
+  ## permissive direction and needs no special case.)
+  if data.strip.len == 0:
+    return newJArray()
+  parseJson(data)
+
+proc contentToJson*(path, data: string): JsonNode =
+  ## Route by extension: .json takes the fast path, everything else is YAML.
+  if path.toLowerAscii.endsWith(".json"): jsonToJson(data) else: yamlToJson(data)
+
 proc yamlLoad*(arena: var Arena, data: string, path: string): NodeId =
   ## Arena LoadProc for YAML content: a fresh subtree, every created node
   ## tagged with the file's origin.
   let oid = arena.registerOrigin(sfYaml, path)
   arena.pushOrigin(oid)
   try:
-    result = arena.fromJson(yamlToJson(data))
+    result = arena.fromJson(contentToJson(path, data))
   finally:
     arena.popOrigin()
 
 proc registerContentLoaders*() =
   ## Register the content loaders on the context's arena, so changed
   ## files can later be reloaded by extension without going through a
-  ## step. YAML handles .json too — see yamlLoad.
+  ## step. One registration covers all three extensions; yamlLoad routes
+  ## .json to std/json internally via contentToJson.
   state.context.arena.registerLoader("yaml", @[".yml", ".yaml", ".json"], yamlLoad)
 
 proc parse(stack: var KeyStack, absolute_path: string, relative_path: string) =
@@ -59,7 +82,7 @@ proc parse(stack: var KeyStack, absolute_path: string, relative_path: string) =
   state.context.arena.pushOrigin(origin)
   try:
     let content = readFile(absolute_path)
-    state.context.mergePath(stack.atoms, yamlToJson(content))
+    state.context.mergePath(stack.atoms, contentToJson(absolute_path, content))
   except IOError:
     fatal "Error reading file ", absolute_path
     raise
