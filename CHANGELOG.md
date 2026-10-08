@@ -48,6 +48,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed file router test cases to use correct relative paths (matching production file_list behavior).
 - Percent-encoded request paths are decoded by the dev server, so pages with non-ASCII names are served instead of 404ing (ported from the legacy line).
 - The development server no longer serves pages in quirks mode. The live reload script is injected after `<!DOCTYPE html>` instead of before it, so layout in `acc dev` matches what `acc build` produces (ported from the legacy line).
+- Deleting an asset removes it from the output. `@copy` only ever walked the
+  source, there was no route-set diff as there is for pages, and a build does
+  not clean the destination first — so a removed image, font or script stayed
+  on disk, stayed in the serving image (which is built from the whole output
+  directory), and was absent from `removed_outputs`. The step now diffs the
+  assets it would copy against the previous build's and unlinks what is gone.
 - `acc init` creates the directories its generated config declares. It read
   them from `state.config.directories`, but init runs before any config is
   loaded, so every field was empty and all six guards skipped: the scaffold
