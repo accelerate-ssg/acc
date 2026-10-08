@@ -4,7 +4,7 @@ export types
 
 
 when FileWatcherStrategy == "WindowsFileNotifyAPI":
-  include fswatch/file-change-notification
+  include fswatch/file_change_notification
 elif FileWatcherStrategy == "FSEvent":
   include fswatch/fsevent
 elif FileWatcherStrategy == "Kqueue":

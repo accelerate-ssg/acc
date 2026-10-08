@@ -48,6 +48,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed file router test cases to use correct relative paths (matching production file_list behavior).
 - Percent-encoded request paths are decoded by the dev server, so pages with non-ASCII names are served instead of 404ing (ported from the legacy line).
 - The development server no longer serves pages in quirks mode. The live reload script is injected after `<!DOCTYPE html>` instead of before it, so layout in `acc dev` matches what `acc build` produces (ported from the legacy line).
+- The Windows file watcher compiles. `include fswatch/file-change-notification`
+  is not a legal Nim include — the dashes made it `Cannot use '-' in 'include'`
+  — and behind that the backend had ten type errors: every Win32 constant was
+  declared `'u32` while winlean's `DWORD` is `int32`, and a local `createFileW`
+  binding shadowed winlean's with an incompatible string type. The module is
+  spliced in only on Windows, so nothing else ever parsed it.
 - `.json` content is parsed with `std/json` instead of being routed through
   NimYAML, which is about twice as fast on the content we host. Trees agree:
   verified over every `.json` file in the hosted sites (519 files, 5.6 MB)

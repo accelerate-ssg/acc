@@ -3,33 +3,37 @@ import os
 when defined(windows):
   import winlean
 
+  # DWORD is int32 in winlean, so these are typed rather than 'u32 literals:
+  # every one of them is either passed to a DWORD parameter or compared with
+  # FILE_NOTIFY_INFORMATION.Action, and unsigned literals mismatch both.
   const
-    FILE_NOTIFY_CHANGE_FILE_NAME = 0x00000001'u32
-    FILE_NOTIFY_CHANGE_DIR_NAME = 0x00000002'u32
-    FILE_NOTIFY_CHANGE_ATTRIBUTES = 0x00000004'u32
-    FILE_NOTIFY_CHANGE_SIZE = 0x00000008'u32
-    FILE_NOTIFY_CHANGE_LAST_WRITE = 0x00000010'u32
+    FILE_NOTIFY_CHANGE_FILE_NAME: DWORD = 0x00000001
+    FILE_NOTIFY_CHANGE_DIR_NAME: DWORD = 0x00000002
+    FILE_NOTIFY_CHANGE_ATTRIBUTES: DWORD = 0x00000004
+    FILE_NOTIFY_CHANGE_SIZE: DWORD = 0x00000008
+    FILE_NOTIFY_CHANGE_LAST_WRITE: DWORD = 0x00000010
 
-    FILE_LIST_DIRECTORY = 0x00000001'u32
-    FILE_SHARE_READ = 0x00000001'u32
-    FILE_SHARE_WRITE = 0x00000002'u32
-    FILE_SHARE_DELETE = 0x00000004'u32
-    OPEN_EXISTING = 3'u32
-    FILE_FLAG_BACKUP_SEMANTICS = 0x02000000'u32
+    FILE_LIST_DIRECTORY: DWORD = 0x00000001
+    FILE_SHARE_READ: DWORD = 0x00000001
+    FILE_SHARE_WRITE: DWORD = 0x00000002
+    FILE_SHARE_DELETE: DWORD = 0x00000004
+    OPEN_EXISTING: DWORD = 3
+    FILE_FLAG_BACKUP_SEMANTICS: DWORD = 0x02000000
 
-    FILE_ACTION_ADDED = 0x00000001'u32
-    FILE_ACTION_REMOVED = 0x00000002'u32
-    FILE_ACTION_MODIFIED = 0x00000003'u32
-    FILE_ACTION_RENAMED_OLD_NAME = 0x00000004'u32
-    FILE_ACTION_RENAMED_NEW_NAME = 0x00000005'u32
+    FILE_ACTION_ADDED: DWORD = 0x00000001
+    FILE_ACTION_REMOVED: DWORD = 0x00000002
+    FILE_ACTION_MODIFIED: DWORD = 0x00000003
+    FILE_ACTION_RENAMED_OLD_NAME: DWORD = 0x00000004
+    FILE_ACTION_RENAMED_NEW_NAME: DWORD = 0x00000005
 
-    NOTIFY_FILTER = FILE_NOTIFY_CHANGE_FILE_NAME or FILE_NOTIFY_CHANGE_DIR_NAME or
-                    FILE_NOTIFY_CHANGE_ATTRIBUTES or FILE_NOTIFY_CHANGE_SIZE or
-                    FILE_NOTIFY_CHANGE_LAST_WRITE
+    NOTIFY_FILTER: DWORD = FILE_NOTIFY_CHANGE_FILE_NAME or
+                           FILE_NOTIFY_CHANGE_DIR_NAME or
+                           FILE_NOTIFY_CHANGE_ATTRIBUTES or
+                           FILE_NOTIFY_CHANGE_SIZE or
+                           FILE_NOTIFY_CHANGE_LAST_WRITE
 
   type
     WCHAR = Utf16Char
-    LPCWSTR = ptr UncheckedArray[WCHAR]
 
     FILE_NOTIFY_INFORMATION {.pure.} = object
       NextEntryOffset: DWORD
@@ -42,11 +46,6 @@ when defined(windows):
     bWatchSubtree: WINBOOL, dwNotifyFilter: DWORD, lpBytesReturned: ptr DWORD,
     lpOverlapped: pointer, lpCompletionRoutine: pointer
   ): WINBOOL {.stdcall, dynlib: "kernel32", importc.}
-
-  proc createFileW(lpFileName: LPCWSTR, dwDesiredAccess: DWORD,
-                   dwShareMode: DWORD, lpSecurityAttributes: pointer,
-                   dwCreationDisposition: DWORD, dwFlagsAndAttributes: DWORD,
-                   hTemplateFile: HANDLE): HANDLE {.stdcall, dynlib: "kernel32", importc: "CreateFileW".}
 
   proc wideStringToNim(ws: ptr UncheckedArray[WCHAR], byteLen: int): string =
     let charLen = byteLen div sizeof(WCHAR)
@@ -68,13 +67,13 @@ when defined(windows):
   proc watchSingleDir(config: ptr WatcherConfig, watchPath: string, interestingEvents: set[EventKind]) =
     let wideDir = newWideCString(watchPath)
     let dirHandle = createFileW(
-      cast[LPCWSTR](wideDir),
+      wideDir,
       FILE_LIST_DIRECTORY,
       FILE_SHARE_READ or FILE_SHARE_WRITE or FILE_SHARE_DELETE,
       nil,
       OPEN_EXISTING,
       FILE_FLAG_BACKUP_SEMANTICS,
-      0
+      Handle(0)
     )
 
     if dirHandle == INVALID_HANDLE_VALUE:
