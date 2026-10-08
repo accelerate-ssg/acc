@@ -122,9 +122,34 @@ when defined(windows):
           break
         pos += int(info.NextEntryOffset)
 
+  type WatchArg = object
+    ## An index rather than the Watch itself: the thread reads the path out
+    ## of the shared config, so no string is copied into the thread payload.
+    config: ptr WatcherConfig
+    index: int
+
+  proc watchThread(arg: WatchArg) {.thread.} =
+    let w = arg.config.watches[arg.index]
+    watchSingleDir(arg.config, w.path, w.kinds)
+
   proc watch*(config: ptr WatcherConfig) {.thread.} =
-    # Watch all configured paths (ReadDirectoryChangesW handles recursion via bWatchSubtree=1)
-    # For simplicity, watch the first path only; multi-path would need multiple threads
-    if config.watches.len > 0:
-      let w = config.watches[0]
-      watchSingleDir(config, w.path, w.kinds)
+    ## One thread per configured path. watchSingleDir blocks in
+    ## ReadDirectoryChangesW — which does handle recursion itself, via
+    ## bWatchSubtree — so the paths cannot be serviced in sequence on one
+    ## thread. Watching only watches[0], as this did, meant the dev server's
+    ## source watch was observed and its content watch was not, so editing
+    ## content never triggered a rebuild.
+    if config.watches.len == 0:
+      return
+
+    # The last one runs here, so a single watch costs no extra thread.
+    var threads = newSeq[Thread[WatchArg]](config.watches.len - 1)
+    for index in 0 ..< config.watches.len - 1:
+      createThread(threads[index], watchThread,
+                   WatchArg(config: config, index: index))
+
+    let last = config.watches.len - 1
+    watchSingleDir(config, config.watches[last].path, config.watches[last].kinds)
+
+    if threads.len > 0:
+      joinThreads(threads)

@@ -69,6 +69,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   handles `..`, an absolute request path and symlinks without enumerating
   spellings. Verified with a canary file: served before, 404 after, with
   normal pages unaffected.
+- The Windows file watcher observes every configured path, one thread per
+  watch, instead of only the first. `acc dev` registers a source watch and a
+  content watch, so content edits were never seen on Windows. Untested on
+  Windows like the rest of that backend — it cross-checks clean, nothing more.
+- A renamed-away file is treated as removed rather than changed, so the output
+  its template produced is unlinked. Watchers report a rename as two events,
+  the old path and the new one, and both were classified as changes.
+- Each log flush replaces the file instead of appending to it. The whole log
+  is rendered every time, so a target flushed twice held two documents back to
+  back and parsed as neither.
+- A malformed `parallel` or `max_concurrent` reports a config-shape error
+  instead of crashing. Both read `.content` off the YAML node, which on a
+  mapping or list is a `FieldDefect` — not a `CatchableError`, so it escaped
+  the CLI's handler as a stack trace.
 - The Windows file watcher compiles. `include fswatch/file-change-notification`
   is not a legal Nim include — the dashes made it `Cannot use '-' in 'include'`
   — and behind that the backend had ten type errors: every Win32 constant was
