@@ -48,6 +48,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed file router test cases to use correct relative paths (matching production file_list behavior).
 - Percent-encoded request paths are decoded by the dev server, so pages with non-ASCII names are served instead of 404ing (ported from the legacy line).
 - The development server no longer serves pages in quirks mode. The live reload script is injected after `<!DOCTYPE html>` instead of before it, so layout in `acc dev` matches what `acc build` produces (ported from the legacy line).
+- `acc init` creates the directories its generated config declares. It read
+  them from `state.config.directories`, but init runs before any config is
+  loaded, so every field was empty and all six guards skipped: the scaffold
+  wrote `acc.yaml` naming seven directories and created none of them. The
+  defaults now sit beside the template they have to agree with, and a fresh
+  `acc init` followed by `acc build` renders.
 - The dev server no longer serves files outside the directories it is given.
   The decoded request path was joined straight onto the destination and source
   roots, so `GET /../../../../etc/passwd` read whatever the process could —

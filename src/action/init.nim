@@ -4,6 +4,17 @@ import logger
 import global_state
 
 const
+  # The directories config_template declares, beside it so the two cannot
+  # drift: init writes that template, so it has to create these. `config`
+  # (.acc) needs no entry — createDir makes parents, and work, scripts and
+  # build all sit inside it.
+  scaffold_src = "src"
+  scaffold_destination = "build"
+  scaffold_content = "content"
+  scaffold_work = ".acc/work"
+  scaffold_scripts = ".acc/scripts"
+  scaffold_build = ".acc/build"
+
   config_template = """---
 manifest_version: v1
 name: ""
@@ -49,13 +60,23 @@ proc init*( state: State ) =
     root.create_dir
 
   if root == "" or root.is_empty:
+    # Defaults, not state.config.directories: `acc init` runs before any
+    # config is read, so every field there is empty and all six guards used
+    # to skip — the scaffold wrote acc.yaml and created none of the
+    # directories it declares. A field is still honoured when something has
+    # set it, so a future caller that does load a config keeps control.
     let dirs = state.config.directories
-    if dirs.src != "": (root / dirs.src).createDir
-    if dirs.destination != "": (root / dirs.destination).createDir
-    if dirs.work != "": (root / dirs.work).createDir
-    if dirs.build != "": (root / dirs.build).createDir
-    if dirs.scripts != "": (root / dirs.scripts).createDir
-    if dirs.content != "": (root / dirs.content).createDir
+    proc dir(configured, fallback: string): string =
+      if configured != "": configured else: fallback
+    for relative in [
+      dir(dirs.src, scaffold_src),
+      dir(dirs.destination, scaffold_destination),
+      dir(dirs.content, scaffold_content),
+      dir(dirs.work, scaffold_work),
+      dir(dirs.scripts, scaffold_scripts),
+      dir(dirs.build, scaffold_build)
+    ]:
+      (root / relative).createDir
 
     let config_path = root / "acc.yaml"
     try:
