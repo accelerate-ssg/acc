@@ -48,6 +48,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed file router test cases to use correct relative paths (matching production file_list behavior).
 - Percent-encoded request paths are decoded by the dev server, so pages with non-ASCII names are served instead of 404ing (ported from the legacy line).
 - The development server no longer serves pages in quirks mode. The live reload script is injected after `<!DOCTYPE html>` instead of before it, so layout in `acc dev` matches what `acc build` produces (ported from the legacy line).
+- Only a rendering step's pages are recorded as routes. The router names
+  every file it is handed `<name>.html`, whichever step's glob pulled it in,
+  and the whole render state was recorded — so a `@copy`-only workflow, which
+  is what `convertLegacyConfig` produces for every pre-0.2 site, filled the
+  route table and the persisted cache with pairs like
+  `(assets/images/a.jpg, assets/images/a.html)` that nothing ever writes.
 - Deleting an asset removes it from the output. `@copy` only ever walked the
   source, there was no route-set diff as there is for pages, and a build does
   not clean the destination first — so a removed image, font or script stayed

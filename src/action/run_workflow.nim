@@ -1,10 +1,12 @@
 import os, osproc, json, strutils, times, options
+import glob
 
 import logger
 import global_state
 import config
 import modules/script_runner/[types, loader, runner]
 import action/internal_functions/[copy, yaml_loader, markdown_renderer]
+import action/internal_functions/step_helpers as sh
 import plugins/registry
 import types/render_state/calculate
 
@@ -192,8 +194,30 @@ proc runWorkflow*(state: State, workflow: Workflow, depth: int = 0) =
       state.render_state = calculate_render_state(state.config, workflow.steps, state.context, state.source_files)
     finally:
       state.context.untrack()
+    # Only a rendering step's pages are routes. A @copy or @yaml step has a
+    # render state too — the router names every file it is handed
+    # `<name>.html`, whichever step's glob pulled it in — but nothing writes
+    # those, so recording them filled the route table with pairs like
+    # (assets/images/a.jpg, assets/images/a.html). Every pre-0.2 site has a
+    # copy-only workflow, since convertLegacyConfig makes one workflow per
+    # build: entry, so this was the normal case rather than an edge one.
+    #
+    # The phantoms were invisible to the page diff in render_filter, whose
+    # globs never match an asset, and a trap for anything whose glob does:
+    # the copy step's route-set diff reported 27 removals that had never
+    # existed on a site with 27 assets before this was understood.
+    #
+    # @copy records its own routes directly, so excluding them here loses
+    # nothing it needs.
     for item in state.render_state:
-      state.routed_outputs.add((item.source_path, item.output_path))
+      var renders = false
+      for step in workflow.steps:
+        if step.module != "" and hasEngine(step.module) and
+           item.source_path.matches(sh.glob(step)):
+          renders = true
+          break
+      if renders:
+        state.routed_outputs.add((item.source_path, item.output_path))
 
     # Run steps
     for step in workflow.steps:

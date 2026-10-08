@@ -67,13 +67,7 @@ proc run*(step: Step) =
   # and stayed deployed — the serving image is built from the whole
   # directory — while being absent from removed_outputs.
   for (source, output) in state.context.previous_outputs:
-    # source == output identifies a pair this step recorded. The others have
-    # to be skipped: routed_outputs is filled from the whole workflow's
-    # render_state (run_workflow.nim:195), and for a copy-only workflow the
-    # router still maps every asset to a phantom `.html` name it will never
-    # write — matching those on source alone reported 27 non-existent
-    # removals on a site with 27 assets.
-    if source != output or not source.matches(glob) or output in present:
+    if not source.matches(glob) or output in present:
       continue
     let stale = destination_directory / output
     if stale.fileExists:
