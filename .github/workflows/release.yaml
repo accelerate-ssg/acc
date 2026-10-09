@@ -69,6 +69,26 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential libpcre3-dev
 
+      # Resolved once, and the job fails here if the static library is
+      # absent. Linking -lpcre instead would bake an absolute Homebrew or
+      # multiarch path into the binary, which is worse than the dlopen it
+      # replaces: it would not start at all off the build machine.
+      - name: Locate the static pcre
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            PCRE_A=$(gcc -print-file-name=libpcre.a)
+          else
+            PCRE_A="$(pcre-config --prefix)/lib/libpcre.a"
+          fi
+          if [ ! -f "$PCRE_A" ]; then
+            echo "No static libpcre at: $PCRE_A"
+            exit 1
+          fi
+          echo "PCRE_CFLAGS=$(pcre-config --cflags)" >> "$GITHUB_ENV"
+          echo "PCRE_A=$PCRE_A" >> "$GITHUB_ENV"
+
       - name: Install Nim dependencies (non-Windows)
         if: runner.os != 'Windows'
         run: nimble install -y
@@ -80,17 +100,17 @@ jobs:
       - name: Build executable (Linux)
         if: runner.os == 'Linux'
         run: |
-          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release
+          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release -d:usePcreHeader --passC:"$PCRE_CFLAGS" --passL:"$PCRE_A"
 
       - name: Build executable (macOS ARM64)
         if: matrix.os == 'macos-latest'
         run: |
-          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:arm64
+          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:arm64 -d:usePcreHeader --passC:"$PCRE_CFLAGS" --passL:"$PCRE_A"
 
       - name: Build executable (macOS x86)
         if: matrix.os == 'macos-15-intel'
         run: |
-          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:amd64
+          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:amd64 -d:usePcreHeader --passC:"$PCRE_CFLAGS" --passL:"$PCRE_A"
 
       - name: Build executable (Windows)
         if: runner.os == 'Windows'

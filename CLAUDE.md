@@ -9,7 +9,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 nimble -d:debug -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on run acc dev ../test_site
 
 # Production build
-nimble build -d:release -p:src --threads:on --mm:orc --deepcopy:on
+nimble build -d:release -p:src --threads:on --mm:orc --deepcopy:on \
+  -d:usePcreHeader --passC:"$(pcre-config --cflags)" \
+  --passL:"$(pcre-config --prefix)/lib/libpcre.a"
 
 # Run tests (inline unit tests in source files)
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/types/render_state/file_router.nim
