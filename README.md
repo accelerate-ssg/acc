@@ -201,6 +201,12 @@ does not exist on macOS, so it reports a failure for an attempt that then
 succeeds on the second name. Linking `-lpcre` instead of the archive would
 bake this machine's Homebrew path into the binary.
 
+Drop the `--passC` where pcre's headers already sit on the compiler's
+default include path, which is why `pcre-config --cflags` prints nothing on
+Debian and Ubuntu. Passing it empty is not harmless: Nim reads the next
+argument as the value of a bare `--passC:`, so the link flag ends up on the
+compile line and the C compiler rejects it.
+
 Do not add `-d:useMalloc`. It routes Nim's allocator to the system `malloc`,
 and on musl that makes acc about 2.1x slower: the same 270-page site renders in
 5.25s with the flag against 2.47s without, as the median of six cold
