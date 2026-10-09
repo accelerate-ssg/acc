@@ -14,7 +14,8 @@
 ##   crosses threads.
 
 import asynchttpserver, asyncdispatch, os, strutils, ws, random, sequtils, json, terminal, uri
-import std/[sets, times]
+import std/[sets, times, options]
+from std/posix import EADDRINUSE
 
 import global_state
 import logger
@@ -28,7 +29,8 @@ const
   reload_script = static_read "dev_server/force_reload.js"
   file_not_found = static_read "dev_server/file_not_found.html"
   chars = {'A'..'F','0'..'9'}.toSeq
-  port = 1331
+  default_port = 1331
+  port_scan_range = 10
 
 var clients: seq[tuple[id: string, socket: WebSocket]]
   ## Every connected tab. Only touched from the dispatcher thread.
@@ -285,6 +287,49 @@ proc watch_for_changes(channel: ptr Channel[Event]) {.async.} =
     debug "Change detected: ", (changed.toSeq & removed.toSeq).join(", ")
     rebuild(ChangeSet(changed: changed.toSeq, removed: removed.toSeq))
 
+proc accept_requests( server: AsyncHttpServer,
+                      callback: proc (request: Request): Future[void] {.closure, gcsafe.}
+                    ) {.async.} =
+  ## The loop `serve` runs, without its listen. `serve` binds its own
+  ## socket, which would drop the one bind_port chose and race another
+  ## site for whatever port it landed on.
+  while true:
+    await server.accept_request(callback)
+
+proc bind_port( server: AsyncHttpServer, requested: Option[int] ): Port =
+  ## Called before the initial build, so the banner can name the port
+  ## and a clash costs a line rather than a wasted render.
+  ##
+  ## An explicit --port is taken literally: it is used or nothing is,
+  ## since a pinned port is usually one something else has to reach.
+  ## Without one, scan upward for the first free port, which is what
+  ## lets a second site be served while the first one runs.
+  let
+    first = requested.get(default_port)
+    last = if requested.isSome: first else: first + port_scan_range - 1
+
+  for candidate in first .. last:
+    try:
+      server.listen(Port(candidate))
+      if candidate != first:
+        info "Port ", first, " is taken; serving on ", candidate, " instead."
+      return Port(candidate)
+    except OSError as e:
+      # listen opens its socket before binding it, so a failed attempt
+      # leaves one behind that the next candidate would not replace.
+      server.close()
+      if e.errorCode != EADDRINUSE.int32:
+        error "Cannot listen on port ", candidate, ": ", e.msg
+        quit(1)
+
+  if requested.isSome:
+    error "Port ", first, " is already in use. Omit --port to take the ",
+      "first free one."
+  else:
+    error "No free port between ", first, " and ", last,
+      ". Pass --port to choose one."
+  quit(1)
+
 proc dev_server*( state: State ) =
   var server = new_async_http_server()
 
@@ -297,9 +342,15 @@ proc dev_server*( state: State ) =
 
   randomize()
 
-  info "╔══════════════════════════════════════════════════════╗"
-  info "║  Starting development server at http://0.0.0.0:" & $port & "  ║"
-  info "╚══════════════════════════════════════════════════════╝"
+  let bound_port = server.bind_port(state.config.devPort)
+
+  # Sized from the message: the port is not a fixed four digits.
+  let
+    banner = "Starting development server at http://0.0.0.0:" & $bound_port.int
+    rule = "═".repeat(banner.len + 4)
+  info "╔" & rule & "╗"
+  info "║  " & banner & "  ║"
+  info "╚" & rule & "╝"
 
   # A broken template must not keep the dev server from starting: serve
   # whatever rendered, report the failure, and let the next file change
@@ -334,6 +385,6 @@ proc dev_server*( state: State ) =
   createThread(watcherThread, watch, addr watcherConfig)
 
   waitFor all(
-    server.serve(Port(port), handle_request(server_root_dir, source_root)),
+    server.accept_requests(handle_request(server_root_dir, source_root)),
     watch_for_changes(watcherConfig.channel)
   )

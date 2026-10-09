@@ -25,6 +25,9 @@ Build/Dev options:
   -d, --destination DIR  Destination directory override
   -w, --work DIR         Work directory override
   -b, --build DIR        Build directory override
+  -p, --port PORT        Port for `acc dev`. Without it, the first free
+                         port at or above 1331 is used, so several sites
+                         can be served at once
   -u, --using STRATEGY   How to find what changed: full, git, mtime
                          [default: full]
   --since REF            Baseline ref for --using=git [default: HEAD]
@@ -98,6 +101,22 @@ proc parseCliArgs*(): Config =
       result.action = ActionRun
       result.runWorkflow = $args["<workflow>"]
     elif args["clean"]: result.action = ActionClean
+
+  # Dev server port. Left as none when not given, so the dev server
+  # scans for a free one; docopt must therefore declare no default of
+  # its own (see the --config note above).
+  if args["--port"]:
+    let raw = $args["--port"]
+    var port: int
+    try:
+      port = parseInt(raw)
+    except ValueError:
+      stderr.writeLine "Invalid --port " & raw & ": not a number"
+      quit(1)
+    if port < 1 or port > 65535:
+      stderr.writeLine "Invalid --port " & raw & ": outside 1-65535"
+      quit(1)
+    result.devPort = some(port)
 
   # Change detection strategy
   result.changeStrategy = if args["--using"]: $args["--using"] else: "full"

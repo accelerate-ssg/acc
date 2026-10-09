@@ -39,7 +39,10 @@ Accelerate (Acc) is a static site generator implemented in Nim. It uses a workfl
 
 **Entry Point & Actions** (`src/acc.nim`, `src/action/`):
 - Main dispatches to actions based on CLI command: `dev`, `build`, `test`, `clean`, `run`, `init`
-- `dev_server.nim` - Async HTTP server (port 1331) with WebSocket live reload and native file watching
+- `dev_server.nim` - Async HTTP server with WebSocket live reload and native
+  file watching. Binds before the initial build: `--port` is used exactly or
+  the run stops, and without it the first free port at or above 1331 is
+  taken, so several sites can be served at once
 - `build.nim` - Finds and runs the "build" workflow (or all workflows)
 - `run_workflow.nim` - Executes workflow pipelines with step orchestration
 
