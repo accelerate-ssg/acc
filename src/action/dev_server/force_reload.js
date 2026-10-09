@@ -17,7 +17,7 @@ const reconnect = () => {
 };
 
 const connect = () => {
-  let socket = new WebSocket("ws://localhost:1331/ws");
+  let socket = new WebSocket(`ws://${window.location.host}/ws`);
   let timestamp;
   let dead = false;
 
