@@ -8,10 +8,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Development build and run
 nimble -d:debug -d:nimDebugDlOpen -p:src --threads:on --mm:orc --deepcopy:on run acc dev ../test_site
 
-# Production build
+# Production build (macOS; pcre's archive and include path from Homebrew)
 nimble build -d:release -p:src --threads:on --mm:orc --deepcopy:on \
-  -d:usePcreHeader --passC:"$(pcre-config --cflags)" \
-  --passL:"$(pcre-config --prefix)/lib/libpcre.a"
+  -d:usePcreHeader --passL:"$(pcre-config --prefix)/lib/libpcre.a" \
+  --passC:"$(pcre-config --cflags)"
+
+# Production build (Debian/Ubuntu; multiarch archive, headers already found)
+nimble build -d:release -p:src --threads:on --mm:orc --deepcopy:on \
+  -d:usePcreHeader --passL:"$(gcc -print-file-name=libpcre.a)"
 
 # Run tests (inline unit tests in source files)
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/types/render_state/file_router.nim

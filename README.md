@@ -120,7 +120,9 @@ one.
 ### macOS
 
 1. Place the binary in your path, for instance in `~/bin`.
-2. Install pcre. With brew: `brew install pcre`
+
+The macOS and Linux binaries carry pcre, so nothing has to be installed
+alongside them.
 
 ## Usage
 
@@ -188,10 +190,19 @@ is the binary to build/run and the arguments to it.
 
 ## Production build
 
+On macOS, with pcre from Homebrew:
+
 ```bash
 nimble build -d:release -p:src --threads:on --mm:orc --deepcopy:on \
-  -d:usePcreHeader --passC:"$(pcre-config --cflags)" \
-  --passL:"$(pcre-config --prefix)/lib/libpcre.a"
+  -d:usePcreHeader --passL:"$(pcre-config --prefix)/lib/libpcre.a" \
+  --passC:"$(pcre-config --cflags)"
+```
+
+On Debian or Ubuntu, with `libpcre3-dev`:
+
+```bash
+nimble build -d:release -p:src --threads:on --mm:orc --deepcopy:on \
+  -d:usePcreHeader --passL:"$(gcc -print-file-name=libpcre.a)"
 ```
 
 The pcre flags link the regex engine into the binary instead of leaving it
@@ -199,13 +210,15 @@ to be found at run time. Without them the binary looks for a shared pcre on
 startup, and the name it tries first (`libpcre.3.dylib`, the Debian soname)
 does not exist on macOS, so it reports a failure for an attempt that then
 succeeds on the second name. Linking `-lpcre` instead of the archive would
-bake this machine's Homebrew path into the binary.
+bake the build machine's library path into the binary.
 
-Drop the `--passC` where pcre's headers already sit on the compiler's
-default include path, which is why `pcre-config --cflags` prints nothing on
-Debian and Ubuntu. Passing it empty is not harmless: Nim reads the next
-argument as the value of a bare `--passC:`, so the link flag ends up on the
-compile line and the C compiler rejects it.
+The two commands differ because the archive is not in the same place and
+`pcre-config` does not describe both. On Debian it reports a prefix of
+`/usr` while `libpcre3-dev` installs into a multiarch directory, hence the
+lookup through `gcc`; and it prints no include flags there, pcre's headers
+already being on the default search path. An empty `--passC:` cannot be
+passed anyway — Nim reads the next argument as its value, which would put
+the link flag on the compile line.
 
 Do not add `-d:useMalloc`. It routes Nim's allocator to the system `malloc`,
 and on musl that makes acc about 2.1x slower: the same 270-page site renders in
