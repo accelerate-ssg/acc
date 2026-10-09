@@ -15,7 +15,10 @@
 
 import asynchttpserver, asyncdispatch, os, strutils, ws, random, sequtils, json, terminal, uri
 import std/[sets, times, options]
-from std/posix import EADDRINUSE
+when defined(windows):
+  from std/winlean import WSAEADDRINUSE
+else:
+  from std/posix import EADDRINUSE
 
 import global_state
 import logger
@@ -318,7 +321,11 @@ proc bind_port( server: AsyncHttpServer, requested: Option[int] ): Port =
       # listen opens its socket before binding it, so a failed attempt
       # leaves one behind that the next candidate would not replace.
       server.close()
-      if e.errorCode != EADDRINUSE.int32:
+      # Winsock's codes do not overlap errno's, so a failed bind reports
+      # a different number on each platform.
+      let in_use = when defined(windows): WSAEADDRINUSE.int32
+                   else: EADDRINUSE.int32
+      if e.errorCode != in_use:
         error "Cannot listen on port ", candidate, ": ", e.msg
         quit(1)
 
