@@ -188,7 +188,18 @@ is the binary to build/run and the arguments to it.
 
 ## Production build
 
-`nimble build -d:release -p:src --threads:on --mm:orc --deepcopy:on`
+```bash
+nimble build -d:release -p:src --threads:on --mm:orc --deepcopy:on \
+  -d:usePcreHeader --passC:"$(pcre-config --cflags)" \
+  --passL:"$(pcre-config --prefix)/lib/libpcre.a"
+```
+
+The pcre flags link the regex engine into the binary instead of leaving it
+to be found at run time. Without them the binary looks for a shared pcre on
+startup, and the name it tries first (`libpcre.3.dylib`, the Debian soname)
+does not exist on macOS, so it reports a failure for an attempt that then
+succeeds on the second name. Linking `-lpcre` instead of the archive would
+bake this machine's Homebrew path into the binary.
 
 Do not add `-d:useMalloc`. It routes Nim's allocator to the system `malloc`,
 and on musl that makes acc about 2.1x slower: the same 270-page site renders in
