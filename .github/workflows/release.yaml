@@ -86,8 +86,15 @@ jobs:
             echo "No static libpcre at: $PCRE_A"
             exit 1
           fi
-          echo "PCRE_CFLAGS=$(pcre-config --cflags)" >> "$GITHUB_ENV"
-          echo "PCRE_A=$PCRE_A" >> "$GITHUB_ENV"
+          # One --passC per include flag, so a prefix needing none
+          # contributes nothing and a multi-flag one does not get split.
+          # A bare --passC: is not inert: Nim reads the next argument as its
+          # value, which puts the link flag on the compile line.
+          PCRE_FLAGS="-d:usePcreHeader --passL:$PCRE_A"
+          for flag in $(pcre-config --cflags); do
+            PCRE_FLAGS="$PCRE_FLAGS --passC:$flag"
+          done
+          echo "PCRE_FLAGS=$PCRE_FLAGS" >> "$GITHUB_ENV"
 
       - name: Install Nim dependencies (non-Windows)
         if: runner.os != 'Windows'
@@ -99,18 +106,21 @@ jobs:
 
       - name: Build executable (Linux)
         if: runner.os == 'Linux'
+        shell: bash
         run: |
-          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release -d:usePcreHeader --passC:"$PCRE_CFLAGS" --passL:"$PCRE_A"
+          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release $PCRE_FLAGS
 
       - name: Build executable (macOS ARM64)
         if: matrix.os == 'macos-latest'
+        shell: bash
         run: |
-          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:arm64 -d:usePcreHeader --passC:"$PCRE_CFLAGS" --passL:"$PCRE_A"
+          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:arm64 $PCRE_FLAGS
 
       - name: Build executable (macOS x86)
         if: matrix.os == 'macos-15-intel'
+        shell: bash
         run: |
-          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:amd64 -d:usePcreHeader --passC:"$PCRE_CFLAGS" --passL:"$PCRE_A"
+          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release --cpu:amd64 $PCRE_FLAGS
 
       - name: Build executable (Windows)
         if: runner.os == 'Windows'
