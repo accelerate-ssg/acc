@@ -126,7 +126,7 @@ one.
 
 ```sh
 acc build [ROOT_DIR]    # run the build workflow once
-acc dev [ROOT_DIR]      # build, then watch and serve on port 1331
+acc dev [ROOT_DIR]      # build, then watch and serve (--port, else 1331+)
 acc run <workflow>      # run a single named workflow
 acc clean               # remove generated output
 ```

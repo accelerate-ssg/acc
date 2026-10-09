@@ -65,6 +65,10 @@ type
     changeSince*: string
     ## Load the persisted context before building and save it after.
     useCache*: bool
+    ## Dev server port from `--port`. When unset the server takes the
+    ## first free port at or above the default, so several sites can be
+    ## served at once; an explicit value is used as given or not at all.
+    devPort*: Option[int]
     directories*: Directories
     workflows*: seq[Workflow]
     genericConfig*: JsonNode

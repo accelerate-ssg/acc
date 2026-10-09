@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `acc dev` takes the first free port at or above 1331 instead of insisting on
+  1331, and `--port` pins one explicitly. Serving a second site meant stopping
+  the first, because the port was a `const` and a clash surfaced as an
+  unhandled `OSError` traceback — after the initial build had already run. The
+  scan covers 1331-1340 and logs the port it settled on, so the banner names
+  where each site is being served. An explicit `--port` is deliberately not
+  scanned from: it is used or the run stops, since a pinned port is usually one
+  something else has to reach. Either way the port is bound before the build,
+  so a clash costs a line instead of a full render.
+
+### Fixed
+
+- Live reload survives a non-default port. The injected reload script dialled
+  `ws://localhost:1331/ws` literally, so a page served anywhere else loaded
+  fine and then never reloaded. It now derives the socket URL from the page's
+  own location, which also repairs reload for a site opened over the LAN — the
+  server has always bound `0.0.0.0`, but `localhost` in the script meant a
+  phone or tablet resolved the socket to itself.
+- Released binaries no longer print a `dlopen` failure for a library they go on
+  to load. pcre is linked in at build time (`-d:usePcreHeader` against the
+  static archive) rather than resolved at startup through Nim's
+  `libpcre(.3|.1|).dylib` fallback list, whose first candidate is the Debian
+  soname and never exists on macOS. 0.2.2 and 0.2.3 were also built with
+  `-d:nimDebugDlOpen`, which reported that successful fallback as a seven-line
+  error ahead of acc's own output; that flag is gone from the release builds
+  too. The binaries no longer need a pcre installed at all.
+
 ## [0.2.3] - 2026-10-08
 
 Packaging only. The source tree is identical to 0.2.2, so there is no
@@ -161,3 +192,5 @@ audited against this line; the outcome:
 
 - Static templates now correctly populate `item` from matching context key. For example, `about.mustache` will have `item` set to the value of `about` in the context, allowing `{{item.name}}` to work as expected. This restores behavior that was broken in 0.1.0.
 - Dynamic templates with object-based collections now correctly populate `item`. For example, `products/{products}.mustache` with context `{ "products": { "widget": { "name": "Widget" } } }` will have `item` set to the product object.
+
+[Unreleased]: https://github.com/accelerate-ssg/acc/compare/v0.2.3...HEAD

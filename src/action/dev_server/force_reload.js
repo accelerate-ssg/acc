@@ -17,6 +17,8 @@ const reconnect = () => {
 };
 
 const connect = () => {
+  // Same host and port the page came from, so the port the server
+  // picked needs no baking in, and reload works over the LAN too.
   let socket = new WebSocket(`ws://${window.location.host}/ws`);
   let timestamp;
   let dead = false;
