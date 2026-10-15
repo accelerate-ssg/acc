@@ -36,12 +36,13 @@ proc split_config_path*(path: string): seq[string] =
       result.add(name)
     result.add(indices)
 
+let placeholder_regex = re2"\$\{([^}]+)\}"
+
 proc interpolate(value: string, config: Config): string =
-  result = value
-  for match in value.findAll(re"\$\{([^}]+)\}"):
-    let path = split_config_path(match[2..^2])
-    let replacement = config.getGenericConfig(path).getStr(match)
-    result = result.replace(match, replacement)
+  value.replace(placeholder_regex,
+    proc (m: RegexMatch2, s: string): string =
+      let path = split_config_path(s[m.group(0)])
+      config.getGenericConfig(path).getStr(s[m.boundaries]))
 
 proc interpolateJsonNode(node: JsonNode, config: Config): JsonNode =
   case node.kind
