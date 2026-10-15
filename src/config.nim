@@ -1,4 +1,5 @@
-import yaml/[parser, dom, stream, data, tojson], tables, options, json, re, strutils, sequtils
+import yaml/[parser, dom, stream, data, tojson], tables, options, json, strutils, sequtils
+import regex
 
 include config/types
 include config/helpers
