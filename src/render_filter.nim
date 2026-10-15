@@ -21,7 +21,7 @@
 ##
 ## With no previous build to narrow against, everything renders.
 
-import std/[sets, os, strutils, algorithm, sequtils]
+import std/[sets, os, strutils, algorithm, sequtils, tables]
 import glob
 
 import logger
@@ -72,6 +72,25 @@ proc ensure_render_filter*(state: State, step: Step) =
       if item.source_path in state.changed_sources:
         state.render_filter.pages.incl(item.output_path)
 
+  # Pages that read files outside the context (git_sha) render when a
+  # file they read, or anything inside a directory they read, changed.
+  if state.context.file_dependencies.len > 0:
+    var touched: seq[string] = @[]
+    for path in state.changed_sources & state.removed_sources:
+      touched.add(normalizedPath(state.config.directories.src / path))
+    for path in state.changed_content:
+      touched.add(normalizedPath(path))
+    if touched.len > 0:
+      for item in state.render_state:
+        if item.output_path in state.context.file_dependencies and
+           item.source_path.matches(step_glob):
+          block check:
+            for dependency in state.context.file_dependencies[item.output_path]:
+              for path in touched:
+                if path.isRelativeTo(dependency):
+                  state.render_filter.pages.incl(item.output_path)
+                  break check
+
   # Route-set diff: compare this step's pages with the previous build's.
   # Runs for full builds too, so a deleted template's pages get unlinked.
   if state.context.previous_outputs.len > 0:
@@ -106,6 +125,7 @@ proc ensure_render_filter*(state: State, step: Step) =
         removeFile(path)
         notice "Removed page: ", output
       state.removed_outputs.add(output)
+      state.context.file_dependencies.del(output)
 
   if not state.render_filter.all and state.changed_content.len > 0:
     var pages = toSeq(state.render_filter.pages)

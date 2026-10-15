@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A `git_sha` Liquid filter: the short sha of the last commit that touched a
+  file, for cache-busting asset URLs —
+  `{{ "src/assets/css/fonts.css" | git_sha }}`. The path is a repository path,
+  from the repository root, whichever directory of the repository the site
+  lives in; a directory gives the last commit touching anything inside it. A
+  file that exists but has never been committed renders an empty sha with a
+  warning, while a path that does not exist, or a site outside a git
+  repository, fails the page. Lookups are cached for the length of a build.
+  Each page records the files it looked up, since the arena's read tracking
+  cannot see them, so a selective build (`--using=git`, `--using=mtime`, or a
+  dev server rebuild) that changes one of those files re-renders the page
+  instead of keeping the old sha.
+
+### Changed
+
+- The context cache format is version 3, to persist those file dependencies.
+  The first build after upgrading ignores the old cache with a warning and
+  builds everything.
+
 ## [0.2.4] - 2026-10-09
 
 ### Added

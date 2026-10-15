@@ -40,6 +40,10 @@ type
     changed_content*: seq[string]
     ## Templates this build changed (source-relative). All their pages render.
     changed_sources*: seq[string]
+    ## Source files this build removed (source-relative). Their pages are
+    ## retired by route-set diffing; pages that depended on them as files
+    ## (git_sha) render again.
+    removed_sources*: seq[string]
     ## Whether a previous build's records exist to narrow against — from a
     ## loaded cache or an earlier build in this process.
     has_previous_build*: bool

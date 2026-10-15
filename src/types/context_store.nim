@@ -38,6 +38,11 @@ type
     ## what route-set diffing compares against to find pages that
     ## appeared or disappeared.
     previous_outputs*: seq[tuple[source: string, output: string]]
+    ## Output path -> the files that page read outside the context (the
+    ## git_sha filter), as absolute paths under the project root. Pages
+    ## record dependencies the arena cannot track here, so a selective
+    ## build that changes one of the files re-renders the page.
+    file_dependencies*: Table[string, seq[string]]
 
 let path_regex = re"^(.+)\[(\d*)\]$"
 
@@ -288,7 +293,7 @@ proc `$`*(ctx: ContextStore): string =
 # ─── Cache ───────────────────────────────────────────────────────────
 
 const ContextCacheMagic = 0x41434343'u32  # "ACCC"
-const ContextCacheVersion = 2'u32
+const ContextCacheVersion = 3'u32
 
 proc writeStr(s: Stream, v: string) =
   s.write(uint32(v.len))
@@ -304,8 +309,9 @@ proc readStr(s: Stream): string =
 
 proc saveCache*(ctx: ContextStore, path: string, stamp: Time) =
   ## Persist the context — tree, origins, access log, consumer labels,
-  ## the previous build's routed pages — with the build stamp that
-  ## mtime-based change detection compares against.
+  ## the previous build's routed pages, the pages' file dependencies —
+  ## with the build stamp that mtime-based change detection compares
+  ## against.
   createDir(path.parentDir)
   let s = newFileStream(path, fmWrite)
   defer: s.close()
@@ -320,6 +326,12 @@ proc saveCache*(ctx: ContextStore, path: string, stamp: Time) =
   for (source, output) in ctx.previous_outputs:
     s.writeStr(source)
     s.writeStr(output)
+  s.write(uint32(ctx.file_dependencies.len))
+  for output, paths in ctx.file_dependencies:
+    s.writeStr(output)
+    s.write(uint32(paths.len))
+    for path in paths:
+      s.writeStr(path)
   ctx.arena.saveArena(s)
 
 proc loadCache*(path: string): Option[tuple[store: ContextStore, stamp: Time]] =
@@ -347,8 +359,16 @@ proc loadCache*(path: string): Option[tuple[store: ContextStore, stamp: Time]] =
       let source = s.readStr()
       let output = s.readStr()
       outputs.add((source, output))
+    var dependencies = initTable[string, seq[string]]()
+    for i in 0 ..< int(s.readUint32()):
+      let output = s.readStr()
+      var paths: seq[string] = @[]
+      for j in 0 ..< int(s.readUint32()):
+        paths.add(s.readStr())
+      dependencies[output] = paths
     let store = ContextStore(arena: loadArena(s), root: root,
-                             previous_outputs: outputs)
+                             previous_outputs: outputs,
+                             file_dependencies: dependencies)
     for name in names:
       discard store.consumer(name)
     result = some((store, stamp))

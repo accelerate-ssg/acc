@@ -11,6 +11,7 @@ import render_filter
 import arena_context_store
 import pitchfork/liquid_lib
 import page_context
+import plugins/git_filter
 
 proc load_partials(step: Step, config: Config): Table[string, string] =
   ## Load partial template files from the source directory and any
@@ -63,6 +64,7 @@ proc run(step: Step, state: State) =
   var failed: seq[string] = @[]
 
   state.ensure_render_filter(step)
+  reset_git_lookup(state.config.directories.root)
 
   for render_item in state.render_state:
     if render_item.source_path.matches(stepGlob) and
@@ -76,6 +78,7 @@ proc run(step: Step, state: State) =
       # through the arena, so this page's recorded reads are exactly the
       # data it depends on.
       discard state.context.track("@page " & render_item.output_path)
+      begin_page()
       try:
         if render_item.source_path notin compiled:
           let absolute_path = src_dir / render_item.source_path
@@ -105,6 +108,12 @@ proc run(step: Step, state: State) =
         failed.add(render_item.output_path)
       finally:
         state.context.untrack()
+        # Files the page read outside the context (git_sha), which the
+        # arena cannot track: the render filter consults these instead.
+        if page_dependencies.len > 0:
+          state.context.file_dependencies[render_item.output_path] = page_dependencies
+        else:
+          state.context.file_dependencies.del(render_item.output_path)
 
   if failed.len > 0:
     raise newException(ValueError, $failed.len & " page(s) failed to render: " &

@@ -91,6 +91,7 @@ proc build*( state: State, source_files: seq[string] ) =
     state.has_previous_build = true
     state.changed_content = @[]
     state.changed_sources = @[]
+    state.removed_sources = @[]
     set_current_dir( current_directory )
 
   state.write_manifest()
@@ -102,6 +103,7 @@ proc build*( state: State ) =
   ## A full build: every source file, less the blacklist and the partials.
   state.changed_content = @[]
   state.changed_sources = @[]
+  state.removed_sources = @[]
   state.build( init_source_files( state.config ))
 
 proc build*( state: State, changes: ChangeSet ) =
@@ -125,6 +127,7 @@ proc build*( state: State, changes: ChangeSet ) =
     unload( path )
 
   state.changed_sources = decision.sources
+  state.removed_sources = decision.removed_sources
   state.changed_content = decision.content & decision.removed_content
   if decision.removed_sources.len > 0:
     notice "Removed template(s): ", decision.removed_sources.join( ", " )
