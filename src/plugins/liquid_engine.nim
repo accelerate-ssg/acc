@@ -11,6 +11,8 @@ import render_filter
 import arena_context_store
 import pitchfork/liquid_lib
 import page_context
+# Registers git_sha, whose reads land in the page consumer tracked below.
+import plugins/git_filter
 
 proc load_partials(step: Step, config: Config): Table[string, string] =
   ## Load partial template files from the source directory and any

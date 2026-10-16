@@ -29,6 +29,7 @@ import config
 import state as state_module
 import arena_context_store
 import action/internal_functions/step_helpers
+import plugins/git_filter
 
 proc compute_stale(state: State) =
   ## The invalidation half, once per build.
@@ -47,14 +48,28 @@ proc compute_stale(state: State) =
     if state.context.known_consumer(label):
       stale.incl(state.context.arena.invalidatedBy(state.context.consumer(label)))
 
+  # Files whose shas pages read through git_sha: re-resolve them, so a
+  # changed sha is written by the file's consumer, then ask what those
+  # writes invalidated — the same query a reloaded content file gets.
+  var files: seq[string] = @[]
+  for path in state.changed_sources & state.removed_sources:
+    files.add(normalizedPath(state.config.directories.src / path))
+  for path in state.changed_content:
+    files.add(normalizedPath(path))
+  refresh_git_files(files)
+  for path in files:
+    let label = file_label(path)
+    if state.context.known_consumer(label):
+      stale.incl(state.context.arena.invalidatedBy(state.context.consumer(label)))
+
   for id in stale:
     let label = state.context.consumer_label(id)
     if label.startsWith("@page "):
       state.render_filter.pages.incl(label[6 .. ^1])
     elif label.startsWith("@step "):
       state.render_filter.modules_all.incl(label[6 .. ^1])
-    # "@router" staleness is covered by the route-set diff; "@load"
-    # consumers are writers, not pages.
+    # "@router" staleness is covered by the route-set diff; "@load" and
+    # "@file" consumers are writers, not pages.
 
 proc ensure_render_filter*(state: State, step: Step) =
   ## Prepare the filter for an engine step: the build-wide stale set,

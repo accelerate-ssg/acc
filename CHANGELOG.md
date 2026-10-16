@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A `git_sha` Liquid filter for cache-busting asset URLs —
+  `{{ "src/assets/css/fonts.css" | git_sha }}` renders the file's short sha in
+  the checked-out commit (its object id at `HEAD`, first 7 characters). It
+  changes exactly when a commit changes the file, and needs no history, so a
+  shallow clone renders the same sha as a full one. The path is a repository
+  path, from the repository root, whichever directory of the repository the
+  site lives in; a directory gives its tree's sha. Uncommitted edits do not
+  change the sha. A file that exists but is not in the checked-out commit
+  renders an empty sha with a warning, while a path that does not exist, or a
+  site outside a git repository, fails the page. The shas live in the arena,
+  each written by its file's own consumer and read by the page that renders
+  it, so dependency tracking covers them like any content: a selective build
+  (`--using=git`, `--using=mtime`, or a dev server rebuild) whose changes alter
+  a file's sha re-renders exactly the pages that read it — an `index.html` that
+  cache-busts its stylesheets re-renders when one of them is committed, and not
+  for an uncommitted edit, which leaves the sha as it was.
+
+### Changed
+
+- The context cache format is version 3, to persist the file shas.
+  The first build after upgrading ignores the old cache with a warning and
+  builds everything.
+
 ## [0.2.4] - 2026-10-09
 
 ### Added

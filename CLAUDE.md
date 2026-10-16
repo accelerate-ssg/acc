@@ -26,6 +26,7 @@ nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/page_context.nim
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/config.nim
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on test/test_cli.nim
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on test/render_paths.nim
+nim c -r -p:src --threads:on --mm:orc --deepcopy:on test/git_filter.nim
 
 # Run template engine tests (from the pitchfork/ directory)
 nim c -r -p:src src/liquid_lib.nim
@@ -96,6 +97,14 @@ Accelerate (Acc) is a static site generator implemented in Nim. It uses a workfl
   the URL the page is served at, derived from its output path). Those names are
   reserved — a content file that would bind one of them is warned about by the
   YAML loader, since the render pass overwrites it.
+- acc registers its own Liquid filters into pitchfork's shared filter registry:
+  `git_filter.nim` adds `git_sha` (a repository path's short object id at
+  `HEAD`, which shallow and full clones agree on). Its shas live in the arena,
+  in `ContextStore.files` — an object detached from the context root, so no
+  template or whole-context read sees it — each written by an `@file <path>`
+  consumer and read under the rendering page's consumer. `compute_stale` in
+  `render_filter.nim` refreshes the shas of changed files and queries those
+  writers with `invalidatedBy`, as it does `@load` writers for content
 
 **Template Engine** (`../pitchfork/`):
 - One bytecode VM with per-language frontends ("tines") under `pitchfork/tines/`

@@ -6,6 +6,7 @@ import change_set
 import action/run_workflow
 import action/internal_functions/yaml_loader
 import types/render_state/file_list
+import plugins/git_filter
 
 proc cache_file(state: State): string =
   if state.config.directories.work == "": ""
@@ -44,6 +45,9 @@ proc build*( state: State, source_files: seq[string] ) =
   ## Builds exactly the files the caller names. Each workflow still narrows this
   ## list by its own step globs, so a step only ever sees what it asked for.
   state.source_files = source_files
+  # Shas are resolved afresh each build; the arena keeps the previous ones
+  # so only a changed sha counts as a write.
+  reset_git_lookup( state.context, state.config.directories.root )
 
   # Selective rendering state for this build: narrow only when there is
   # something to narrow by.
@@ -91,6 +95,7 @@ proc build*( state: State, source_files: seq[string] ) =
     state.has_previous_build = true
     state.changed_content = @[]
     state.changed_sources = @[]
+    state.removed_sources = @[]
     set_current_dir( current_directory )
 
   state.write_manifest()
@@ -102,6 +107,7 @@ proc build*( state: State ) =
   ## A full build: every source file, less the blacklist and the partials.
   state.changed_content = @[]
   state.changed_sources = @[]
+  state.removed_sources = @[]
   state.build( init_source_files( state.config ))
 
 proc build*( state: State, changes: ChangeSet ) =
@@ -125,6 +131,7 @@ proc build*( state: State, changes: ChangeSet ) =
     unload( path )
 
   state.changed_sources = decision.sources
+  state.removed_sources = decision.removed_sources
   state.changed_content = decision.content & decision.removed_content
   if decision.removed_sources.len > 0:
     notice "Removed template(s): ", decision.removed_sources.join( ", " )
