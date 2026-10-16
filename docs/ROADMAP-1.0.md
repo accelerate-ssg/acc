@@ -33,7 +33,10 @@ only with a major version or a new `manifest_version`:
    that changes output counts as a contract change.
 5. **CLI:** commands, flags and exit codes. For a build server the exit
    code is the contract.
-6. **Build artifacts others consume:** `manifest.json`, once a delta deploy
+6. **Script API:** what a JavaScript `script:` step sees and may do. That
+   covers the context it receives and how its changes merge back, its return
+   value, logging, and how an error fails the step.
+7. **Build artifacts others consume:** `manifest.json`, once a delta deploy
    reads it.
 
 The context cache (`context.cache`) is *not* a contract. It's versioned and
@@ -162,13 +165,28 @@ regenerable, and may change in any release.
 
 ## 4. Decisions needed
 
-**D1. Script steps in 1.0 (B1).** Either make them real (build the JS
-runner from source in CI for every platform, ship it beside the binary,
-locate it relative to the binary) or take them out of the 1.0 contract, so a
-`script:` step fails at config load with a clear message. *Recommendation:*
-take them out unless a hosted site depends on one today. `command:` steps
-cover the same need, and the runner ABI (a `JsonNode` cast to `pointer`
-across a dynlib boundary) is not something to freeze.
+**D1. How JavaScript script steps ship (B1).** *Decided:* JavaScript
+scripting is required for 1.0. What's left to decide is how the engine
+reaches the binary. The runner's source isn't in any `accelerate-ssg`
+repository today, so the first step either way is to bring it in.
+
+- *Embedded:* compile the engine into `acc` with `{.compile.}`, the same way
+  M1 brings in md4c. Duktape, which the current runner uses, is a single C
+  file. This removes the runner discovery relative to the current
+  directory, the per-platform dynamic library, and the `JsonNode` cast to
+  `pointer` across a dynlib boundary.
+- *Shipped beside the binary:* build the runner library in CI for every
+  platform, publish it in a release archive next to `acc`, and locate it
+  relative to the binary.
+
+*Recommendation:* embedded. A single binary keeps the "place it in your
+path" install true, and the script API in §1 becomes a Nim interface rather
+than a C ABI. The dynamic-runner loader can come back after 1.0 if a second
+language is ever wanted. Choosing the engine is part of this decision.
+Duktape is what exists, but it targets ES5.1 with partial ES2015+. QuickJS
+supports ES2023 and is a handful of C files. Which one depends on what the
+existing scripts use. Either way, `.nims` steps are rejected at load:
+Nimscript is gone.
 
 **D2. Inert config keys (B3).** *Recommendation:* warn at load for v1, and
 reserve them, so a later minor version can implement them without changing
@@ -240,9 +258,24 @@ empty or explained.
 1. Every failure in B2 exits non-zero: an unknown module or workflow, a
    missing script, a script error (unless `on_failure: continue`), and no
    workflows. Ctrl-C exits 130. Add a CLI test per case.
-2. Resolve D1. Either the runner is built, shipped and found relative to the
-   binary, or `script:` is rejected at load with a message pointing to
-   `command:`.
+2. JavaScript script steps that work from a release binary (B1, D1):
+   - Bring the runner's source into the repository, or a sibling one,
+     pinned like pitchfork and arena.
+   - Ship the engine as D1 decides, embedded by recommendation. Then delete
+     the 0-byte `script_runners/libaccjs.dylib`, and the runner lookup
+     relative to the current directory if it's no longer needed.
+   - Define and document the script API (§1.6): how the script receives the
+     context and how its changes merge back (today
+     `ContextStore.applyScriptChanges`), what it returns, where
+     `console.log` goes (the logger), and how a thrown error fails the step
+     with the script's file and line.
+   - Decide what a script's reads mean for selective builds. Today a script
+     gets the whole context, so its writes invalidate like a content
+     reload, but its reads are not narrowed.
+   - Reject `.nims` steps at config load with a message.
+   - Tests: a script step in the fixture site, plus error, missing-script
+     and `on_failure: continue` cases, run in CI against the release build
+     on every tier-1 platform.
 3. Resolve D2: warn on inert keys.
 4. Workflow `if` evaluated without `test(1)`, so it works on Windows, and
    `env` scoped to the workflow that declares it, then restored.
@@ -254,7 +287,8 @@ empty or explained.
 7. Merge `git_sha`.
 
 *Exit:* a scripted fleet build (every hosted site) reports failures by exit
-code alone.
+code alone, and the fixture's JavaScript step runs from the release binary on
+Linux and macOS with nothing installed beside it.
 
 ### M3 → 0.5.0: Precision
 
@@ -299,10 +333,13 @@ code alone.
 
 - [ ] Every blocker in §2 is fixed with a test, or moved past 1.0 by an
       explicit decision recorded here.
-- [ ] D1–D6 are decided and reflected in the code.
+- [ ] D2–D6 are decided, D1's shipping question is settled, and all of
+      it is reflected in the code.
 - [ ] Every contract in §1 is documented, and covered by a test or the
       fixture site.
 - [ ] `strings acc | grep -i libpcre` prints nothing on every platform.
+- [ ] A JavaScript script step runs from the downloaded release binary on
+      every tier-1 platform, on a machine with nothing else installed.
 - [ ] CI is green on the release commit. The tag matches `acc.nimble`.
       Checksums are published.
 - [ ] Every hosted site builds on the RC with the expected output.
