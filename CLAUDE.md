@@ -98,8 +98,8 @@ Accelerate (Acc) is a static site generator implemented in Nim. It uses a workfl
   reserved — a content file that would bind one of them is warned about by the
   YAML loader, since the render pass overwrites it.
 - acc registers its own Liquid filters into pitchfork's shared filter registry:
-  `git_filter.nim` adds `git_sha` (short sha of the last commit touching a
-  repository path). A filter reads outside the context, so it records the files
+  `git_filter.nim` adds `git_sha` (a repository path's short object id at
+  `HEAD`, which shallow and full clones agree on). A filter reads outside the context, so it records the files
   per page in `ContextStore.file_dependencies`, which `render_filter.nim`
   matches against a selective build's changed and removed files
 

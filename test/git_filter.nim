@@ -18,11 +18,12 @@ proc commit(repo, message: string) =
               quoteShell(message))
 
 proc sha_of(repo, path: string): string =
-  run("git -C " & repo & " log -1 --format=%h -- " & quoteShell(path))
+  ## The file's object id at HEAD, cut to the filter's fixed length.
+  run("git -C " & repo & " rev-parse HEAD:" & path)[0 ..< SHA_LENGTH]
 
 proc scratchRepo(): string =
-  ## Two commits: fonts.css in the first, main.css in the second, so the
-  ## two files have different shas and neither is just HEAD's.
+  ## Two commits: fonts.css in the first, main.css in the second, so
+  ## fonts.css is unchanged by HEAD.
   result = getTempDir() / "acc_git_filter_test"
   removeDir(result)
   createDir(result / "site" / "src" / "assets")
@@ -40,10 +41,11 @@ suite "git_sha":
     reset_git_lookup(repo)
     begin_page()
 
-  test "a file reports the last commit touching it, not HEAD":
-    check git_sha("site/src/assets/fonts.css") == sha_of(repo, "site/src/assets/fonts.css")
-    check git_sha("site/src/assets/fonts.css") != sha_of(repo, ".")
-    check git_sha("site/src/assets/main.css") == sha_of(repo, ".")
+  test "a file reports its object id in the checked-out commit":
+    let sha = git_sha("site/src/assets/fonts.css")
+    check sha == sha_of(repo, "site/src/assets/fonts.css")
+    check sha.len == SHA_LENGTH
+    check sha != git_sha("site/src/assets/main.css")
 
   test "the filter renders the sha in a Liquid template":
     let output = render("""{{ "site/src/assets/fonts.css" | git_sha }}""", newJObject())
@@ -52,10 +54,17 @@ suite "git_sha":
   test "a leading slash is accepted":
     check git_sha("/site/src/assets/fonts.css") == sha_of(repo, "site/src/assets/fonts.css")
 
-  test "a directory reports the last commit inside it":
-    check git_sha("site/src/assets") == sha_of(repo, "site/src/assets/main.css")
+  test "a directory reports its tree's id":
+    check git_sha("site/src/assets") == sha_of(repo, "site/src/assets")
 
-  test "a new commit is seen after a reset":
+  test "the sha is stable across commits that leave the file alone":
+    let before = git_sha("site/src/assets/fonts.css")
+    writeFile(repo / "site" / "src" / "assets" / "main.css", "main v2")
+    commit(repo, "main v2")
+    reset_git_lookup(repo)
+    check git_sha("site/src/assets/fonts.css") == before
+
+  test "a commit changing the file is seen after a reset":
     let before = git_sha("site/src/assets/fonts.css")
     writeFile(repo / "site" / "src" / "assets" / "fonts.css", "fonts v2")
     commit(repo, "fonts v2")
@@ -66,7 +75,24 @@ suite "git_sha":
     check git_sha("site/src/assets/fonts.css") == sha_of(repo, "site/src/assets/fonts.css")
     check git_sha("site/src/assets/fonts.css") != before
 
-  test "an uncommitted file renders empty instead of failing":
+  test "uncommitted edits do not change the sha":
+    let before = git_sha("site/src/assets/fonts.css")
+    writeFile(repo / "site" / "src" / "assets" / "fonts.css", "dirty")
+    reset_git_lookup(repo)
+    check git_sha("site/src/assets/fonts.css") == before
+
+  test "a shallow clone gives the same shas as the full repository":
+    let shallow = getTempDir() / "acc_git_filter_shallow"
+    removeDir(shallow)
+    discard run("git clone -q --depth 1 file://" & repo & " " & shallow)
+    check run("git -C " & shallow & " rev-parse --is-shallow-repository") == "true"
+    let full_fonts = git_sha("site/src/assets/fonts.css")
+    let full_dir = git_sha("site/src/assets")
+    reset_git_lookup(shallow)
+    check git_sha("site/src/assets/fonts.css") == full_fonts
+    check git_sha("site/src/assets") == full_dir
+
+  test "a file not in the checked-out commit renders empty instead of failing":
     writeFile(repo / "site" / "src" / "assets" / "new.css", "new")
     check git_sha("site/src/assets/new.css") == ""
 

@@ -1,18 +1,20 @@
-## The `git_sha` Liquid filter: the short sha of the last commit that
-## touched a file, for cache-busting asset URLs.
+## The `git_sha` Liquid filter: a file's short sha in the checked-out
+## commit, for cache-busting asset URLs.
 ##
 ##   @import url("/assets/css/fonts.css?v={{ "src/assets/css/fonts.css" | git_sha }}");
 ##
 ## The path is a repository path, relative to the repository root like
 ## every path git prints, whichever directory of the repository the site
-## lives in. A directory works too: its sha is the last commit touching
-## anything inside it.
+## lives in. A directory works too, giving its tree's sha.
 ##
-## The sha is of the last *commit*, so uncommitted edits to the file do
-## not change it. And in a shallow clone every file's history ends at the
-## clone's oldest commit, so files untouched since then all report that
-## commit — still a valid cache key, just one that changes more often
-## than the file does. Both are warned about where they can be detected.
+## The sha is the file's own object id at HEAD (`git rev-parse
+## HEAD:<path>`): it changes exactly when a commit changes the file's
+## content, and it is read from the checked-out tree alone, so a shallow
+## clone gives the same answer as a full one. Uncommitted edits do not
+## change it. It is always the first SHA_LENGTH characters of the full
+## id rather than git's `--short`, whose length grows with the number of
+## objects in the repository and so would differ between a shallow and a
+## full clone of the same commit.
 ##
 ## A page's output now depends on something outside the context, which
 ## the arena's read tracking cannot see. So each page records the files
@@ -38,6 +40,8 @@ type
     shas: Table[string, string]
       ## Repository path -> short sha, for the current build.
 
+const SHA_LENGTH* = 7
+
 var
   lookup: GitLookup
   page_dependencies*: seq[string]
@@ -54,8 +58,7 @@ proc begin_page*() =
 
 proc git(args: varargs[string]): tuple[output: string, exitCode: int] =
   ## Run git in the project root. Arguments go to git directly, not
-  ## through a shell, so the `:(top)` pathspec needs no quoting on any
-  ## platform.
+  ## through a shell, so no argument needs quoting on any platform.
   let process = startProcess("git", args = @["-C", lookup.root] & @args,
                              options = {poUsePath, poStdErrToStdOut})
   defer: process.close()
@@ -66,17 +69,13 @@ proc ensure_ready() =
   if lookup.ready:
     return
 
-  let (output, code) = git("rev-parse", "--show-prefix", "--is-shallow-repository")
+  let (output, code) = git("rev-parse", "--show-prefix")
   if code != 0:
     raise newException(ValueError,
       "git_sha needs the site to be in a git repository, but git failed in " &
       lookup.root & ": " & output.strip)
 
-  let lines = output.splitLines
-  lookup.prefix = if lines.len > 0: lines[0].strip else: ""
-  if lines.len > 1 and lines[1].strip == "true":
-    warn "git_sha: the repository is a shallow clone, so files unchanged ",
-      "since its oldest commit all report that commit's sha."
+  lookup.prefix = output.strip
   lookup.ready = true
 
 proc local_path(repo_path: string): string =
@@ -85,10 +84,10 @@ proc local_path(repo_path: string): string =
   normalizedPath(lookup.root / relativePath("/" & repo_path, "/" & lookup.prefix, '/'))
 
 proc git_sha*(repo_path: string): string =
-  ## The short sha of the last commit touching `repo_path`. Empty, with a
-  ## warning, for a file that exists but has never been committed. Raises
+  ## The short sha of `repo_path` in the checked-out commit. Empty, with
+  ## a warning, for a file that exists but is not in that commit. Raises
   ## for a path that does not exist, or when there is no repository.
-  let path = repo_path.strip.strip(trailing = false, chars = {'/'})
+  let path = repo_path.strip.replace('\\', '/').strip(trailing = false, chars = {'/'})
   if path == "":
     raise newException(ValueError, "git_sha needs a repository path, got an empty value")
 
@@ -107,19 +106,16 @@ proc git_sha*(repo_path: string): string =
       "git_sha: no such file in the repository: " & path &
       " (paths are relative to the repository root)")
 
-  # `:(top)` pins the pathspec to the repository root rather than to the
-  # directory git runs in.
-  let (output, code) = git("log", "-1", "--format=%h", "--", ":(top)" & path)
-  if code != 0:
-    raise newException(ValueError, "git_sha: git log failed for " & path &
-      ": " & output.strip)
-
-  # The sha is the last line; anything before it is a warning git wrote
-  # to the merged stderr.
-  let lines = output.strip.splitLines
-  result = if lines.len > 0: lines[^1].strip else: ""
-  if result == "":
-    warn "git_sha: ", path, " has not been committed yet, so its sha renders empty."
+  # `HEAD:<path>` names the path from the repository root, not from the
+  # directory git runs in. --verify --quiet prints nothing and exits 1
+  # when the path is not in HEAD (or there is no HEAD yet).
+  let (output, code) = git("rev-parse", "--verify", "--quiet", "HEAD:" & path)
+  let sha = output.strip
+  if code == 0 and sha.len >= SHA_LENGTH:
+    result = sha[0 ..< SHA_LENGTH]
+  else:
+    warn "git_sha: ", path, " is not in the checked-out commit, so its sha renders empty."
+    result = ""
   lookup.shas[path] = result
 
 proc git_sha_filter(value: VMValue, args: varargs[VMValue]): VMValue =
