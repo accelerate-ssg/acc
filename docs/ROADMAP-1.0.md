@@ -1,6 +1,6 @@
 # Accelerate 1.0 Roadmap
 
-Status: draft · Baseline: `0.2.4` (`main` at `eb5d322`) · Written: 2026-10-16
+Status: draft · Baseline: `0.2.4` (`main` at `eb5d322`) · Written: 2026-10-16 · Updated: 2026-10-16
 
 This plan takes acc from 0.2.4 to 1.0. It is based on a read of `main`,
 the README, CHANGELOG, CLAUDE.md, `MIGRATION_0_2_2.md`,
@@ -28,16 +28,20 @@ only with a major version or a new `manifest_version`:
    segments only shape the output path.
 3. **Page context:** the reserved keys `item`, `items` and `page`, and what
    each contains for every kind of route.
-4. **Template output:** Liquid and Mustache as rendered by a pinned
-   pitchfork version, plus acc's own filters (`git_sha`). A pitchfork bump
-   that changes output counts as a contract change.
+4. **Template output:** Liquid, Mustache and Handlebars as rendered by a
+   pinned pitchfork version, plus acc's own filters (`git_sha`). A pitchfork
+   bump that changes output counts as a contract change.
 5. **CLI:** commands, flags and exit codes. For a build server the exit
    code is the contract.
 6. **Script API:** what a JavaScript `script:` step sees and may do. That
    covers the context it receives and how its changes merge back, its return
    value, logging, and how an error fails the step.
-7. **Build artifacts others consume:** `manifest.json`, once a delta deploy
-   reads it.
+7. **Post-processing:** the post-processing steps (content hashes,
+   `<picture>`/`srcset` expansion, broken-link scanning), their options and
+   their order, and what they rewrite in the output.
+8. **Build artifacts others consume:** the image-variant manifest the image
+   service reads, the asset-hash manifest, and `manifest.json`, once a delta
+   deploy reads it.
 
 The context cache (`context.cache`) is *not* a contract. It's versioned and
 regenerable, and may change in any release.
@@ -83,7 +87,8 @@ regenerable, and may change in any release.
   context once per step, so its `@step` consumer reads everything, and any
   content change re-renders every Mustache page. Most hosted sites are
   Mustache. Liquid already renders lazily; Mustache needs the same through
-  pitchfork's arena API.
+  pitchfork's arena API. The pitchfork switch (§3, D4) is where this should
+  land.
 - **Rendered templates always get `.html`.** So `main.css.liquid` becomes
   `main.css.html`, and feeds and sitemaps can't be templates.
   (`file_router.nim:337,387`)
@@ -144,9 +149,11 @@ regenerable, and may change in any release.
   - "Development" refers to `acc run -d ../test_site ...plugins/test.nims`
   - "Usage" leaves out `init`
 - **CLAUDE.md:** says `State.context` is a `JsonNode`; it's a `ContextStore`.
-- **`PROPOSAL-content-hashed-assets.md`:** its sketch uses the pre-0.2
-  `config.yaml`/`name: '@digest'` form, refers to Nimscript, and puts the
-  step in `mustache_renderer.nim`, which no longer exists.
+- **`PROPOSAL-content-hashed-assets.md`:** superseded by the post-processing
+  work (§3). Its sketch uses the pre-0.2 `config.yaml`/`name: '@digest'`
+  form, refers to Nimscript, and puts the step in `mustache_renderer.nim`,
+  which no longer exists. Its analysis of reference rewriting and hash
+  ordering still holds, and M4 relies on it.
 
 ---
 
@@ -157,7 +164,10 @@ regenerable, and may change in any release.
 | `git_sha` Liquid filter, tracked through the arena | `claude/relaxed-ramanujan-mx3du3` | Ready for review |
 | Remove direct `std/re` from acc | `refactor/regex` (`2857306`) | Not merged |
 | Remove direct `std/re` from pitchfork | pitchfork branch | Not merged |
-| Content-hashed assets (`@digest`) | `PROPOSAL-content-hashed-assets.md` | Proposal |
+| New pitchfork: Liquid, Mustache and Handlebars | Local, unreleased | acc moves to it before 1.0 |
+| Post-processing: content hashes, `<picture>`/`srcset` expansion, broken-link scan | In progress | Lands before 1.0; supersedes `PROPOSAL-content-hashed-assets.md` |
+| picturesque as a post-processing step | `accelerate-ssg/picturesque` (standalone tool and library today) | Becomes a step before 1.0 |
+| Image service: rescales one source image into every variant a site uses | External; built on `imaginary` (size metadata for all relevant formats) and picturesque | Separate service; consumes the variant manifest |
 | Visual editor | `editor-architecture.md` | Design; post-1.0 |
 | Fleet follow-ups | `MIGRATION_0_2_2.md` "After the image lands" | Per site |
 
@@ -200,15 +210,44 @@ already plans. *Recommendation:* keep the converter, drop the fallback, and
 fail a legacy site whose templates still use the old grammar with a message
 naming the file.
 
-**D4. Lazy Mustache before or after 1.0.** *Recommendation:* before. It's
-the difference between selective builds working and not working for most
-hosted sites, and it may need a pitchfork release that is easier to land
-during 0.x.
+**D4. What the pitchfork switch must bring.** acc moves to the new
+pitchfork before 1.0 (§3). *Recommendation:* make lazy, arena-backed
+rendering for Mustache and Handlebars a condition of the switch, as Liquid
+has today, so selective builds narrow for every engine. Add an
+`@handlebars` engine to acc at the same time. Measure on the largest hosted
+site: pages rendered for a one-file content change, before and after.
 
-**D5. `git_sha` and `@digest`.** Both are answers to cache busting.
-*Recommendation:* ship `git_sha` now, since it's built, needs no reference
-rewriting, and fits `?v=` schemes. Take `@digest` as the 1.x answer, once
-output extensions (§2) and lazy Mustache land.
+**D5. `git_sha` alongside content hashing.** Content hashes now land before
+1.0 as post-processing, so 1.0 has two cache-busting schemes. *Recommendation:*
+keep `git_sha`. It needs no reference rewriting, fits existing `?v=` schemes,
+and works in the dev server, where hashing is meant to be off. Document
+content hashing as the default and `git_sha` as the lightweight option.
+
+**D7. Post-processing and selective builds.** Post-processing runs over
+rendered output, so a selective build must decide what it re-runs.
+- **Content hashes cascade.** A changed font changes the stylesheet that
+  references it, which changes that stylesheet's hash, which changes every
+  page linking it. So hashing works in dependency order (leaves first).
+- **Recording dependencies.** Each rewrite should record which outputs it
+  touched, so a rebuild reprocesses only those. `git_sha` records its file
+  reads through the arena; post-processing would need the same for output
+  files.
+- **Broken-link scanning** needs the whole output, so it runs on every
+  build, or reads a link index persisted beside the cache.
+- **Dev mode.** Hashing and `srcset` expansion turn off in `acc dev`, as the
+  proposal suggests, so the steps need a mode flag that templates can't
+  tell apart.
+
+*Recommendation:* settle this design before writing the first step. It
+decides whether post-processing is one phase after all workflows or a
+step kind inside them.
+
+**D8. The image-variant manifest is an interface.** picturesque emits a
+manifest of every variant a site needs, and the external service rescales
+from it. Once both are in production, the format is a contract between two
+deployables that ship on their own schedules. *Recommendation:* version it
+(a `version` field from the first release) and document it with the other
+§1 contracts.
 
 **D6. Platform tiers.** *Recommendation:* Linux and macOS (arm64, x86) are
 tier 1, tested in CI and used in production. Windows is tier 2: built and
@@ -290,11 +329,11 @@ empty or explained.
 code alone, and the fixture's JavaScript step runs from the release binary on
 Linux and macOS with nothing installed beside it.
 
-### M3 → 0.5.0: Precision
+### M3 → 0.5.0: Engine and precision
 
-1. Lazy Mustache rendering against the arena (D4), so selective builds
-   narrow for Mustache sites. Measure on the largest hosted site: pages
-   rendered for a one-file content change, before and after.
+1. Switch to the new pitchfork with lazy rendering for every engine (D4),
+   and add the `@handlebars` engine. Compare fleet output before and after:
+   the switch is a contract change under §1.4.
 2. Output extensions follow the template: `feed.xml.liquid` → `feed.xml`,
    `main.css.liquid` → `main.css`, with `.html` when there's no inner
    extension. Check the fleet for templates this would rename first.
@@ -307,7 +346,22 @@ Linux and macOS with nothing installed beside it.
    `build` renders something.
 6. The legacy converter keeps list and map step config.
 
-### M4 → 1.0.0-rc: Freeze and document
+### M4 → 0.6.0: Post-processing
+
+1. The post-processing design (D7): where it runs, how it records what it
+   rewrote, and how selective builds and the dev server treat it.
+2. Content hashes for assets, with reference rewriting in markup, CSS
+   `url()`, copied static files (`site.webmanifest`) and content-named
+   paths. Hash leaves first, as the proposal sets out. It needs M3.2,
+   since stylesheets have to be real `.css` outputs.
+3. picturesque as a step: `<picture>`/`srcset` and CSS `image-set()`
+   expansion, plus the variant manifest (D8) for the image service.
+4. A broken-link scan that fails the build, or warns under
+   `on_failure: continue`, naming the page and the link.
+5. Fixture coverage for each, and a run on the two sites used for the md4c
+   comparison.
+
+### M5 → 1.0.0-rc: Freeze and document
 
 1. Reference docs for everything in §1: config schema and module options
    (`glob`, `partial_directories`, `search_dirs`, `context_path_prefix`,
@@ -333,7 +387,7 @@ Linux and macOS with nothing installed beside it.
 
 - [ ] Every blocker in §2 is fixed with a test, or moved past 1.0 by an
       explicit decision recorded here.
-- [ ] D2–D6 are decided, D1's shipping question is settled, and all of
+- [ ] D2–D8 are decided, D1's shipping question is settled, and all of
       it is reflected in the code.
 - [ ] Every contract in §1 is documented, and covered by a test or the
       fixture site.
@@ -342,14 +396,17 @@ Linux and macOS with nothing installed beside it.
       every tier-1 platform, on a machine with nothing else installed.
 - [ ] CI is green on the release commit. The tag matches `acc.nimble`.
       Checksums are published.
-- [ ] Every hosted site builds on the RC with the expected output.
+- [ ] Every hosted site builds on the RC with the expected output,
+      post-processing included.
+- [ ] The image service builds a hosted site's variants from the manifest
+      the RC produces.
 
 ---
 
 ## 6. Out of scope for 1.0
 
-- `@digest` content-hashed assets (D5), unless it turns out to be cheap
-  after M3.
+- The image service itself. It's an external deployable; only the manifest
+  it reads is in scope (D8).
 - The visual editor (`editor-architecture.md`). 1.0 should keep its
   prerequisites possible (Liquid `include` with variable names, live reload)
   rather than build any of it.
