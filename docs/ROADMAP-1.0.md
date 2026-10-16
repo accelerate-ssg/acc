@@ -268,7 +268,20 @@ has a test.
 1. Ship the stdlib with releases (D2) and test it in CI by running the e2e
    fixture with the *release artifact* in a clean container that has no Nim
    installed.
-2. Replace `std/re` with `nim-regex` to drop the PCRE runtime dependency.
+2. Replace nim-markdown with md4c to drop PCRE. nim-markdown (0.8.8)
+   imports `std/re`, which loads libpcre at runtime via `dlopen`, so `acc`
+   currently depends on PCRE being installed on the target machine. Replace
+   it with md4c (plain C, CommonMark), vendored and compiled in via
+   `{.compile.}` with a thin Nim wrapper.
+   - Vendor md4c at a pinned tag.
+   - Write the wrapper and swap the `@markdown` step to use it.
+   - Move acc's own `std/re` uses (`src/config.nim`,
+     `src/types/context_store.nim`) to `nim-regex`, or the check below
+     still finds libpcre.
+   - Compare output on helmaskin.se and hagges.se (output hashes or a diff).
+   - Verify: `strings acc | grep -i libpcre` prints nothing.
+   - Related: tag new releases of `arena` and `pitchfork` with their
+     `regex` migrations and bump the pins in `acc.nimble`.
 3. Add the polling watcher (D3).
 4. Modernise the release workflow: use `softprops/action-gh-release` or `gh
    release`, publish `.tar.gz`/`.zip` archives with SHA-256 checksums, fail if
