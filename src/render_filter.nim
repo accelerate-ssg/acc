@@ -21,7 +21,7 @@
 ##
 ## With no previous build to narrow against, everything renders.
 
-import std/[sets, os, strutils, algorithm, sequtils, tables]
+import std/[sets, os, strutils, algorithm, sequtils]
 import glob
 
 import logger
@@ -29,6 +29,7 @@ import config
 import state as state_module
 import arena_context_store
 import action/internal_functions/step_helpers
+import plugins/git_filter
 
 proc compute_stale(state: State) =
   ## The invalidation half, once per build.
@@ -47,14 +48,28 @@ proc compute_stale(state: State) =
     if state.context.known_consumer(label):
       stale.incl(state.context.arena.invalidatedBy(state.context.consumer(label)))
 
+  # Files whose shas pages read through git_sha: re-resolve them, so a
+  # changed sha is written by the file's consumer, then ask what those
+  # writes invalidated — the same query a reloaded content file gets.
+  var files: seq[string] = @[]
+  for path in state.changed_sources & state.removed_sources:
+    files.add(normalizedPath(state.config.directories.src / path))
+  for path in state.changed_content:
+    files.add(normalizedPath(path))
+  refresh_git_files(files)
+  for path in files:
+    let label = file_label(path)
+    if state.context.known_consumer(label):
+      stale.incl(state.context.arena.invalidatedBy(state.context.consumer(label)))
+
   for id in stale:
     let label = state.context.consumer_label(id)
     if label.startsWith("@page "):
       state.render_filter.pages.incl(label[6 .. ^1])
     elif label.startsWith("@step "):
       state.render_filter.modules_all.incl(label[6 .. ^1])
-    # "@router" staleness is covered by the route-set diff; "@load"
-    # consumers are writers, not pages.
+    # "@router" staleness is covered by the route-set diff; "@load" and
+    # "@file" consumers are writers, not pages.
 
 proc ensure_render_filter*(state: State, step: Step) =
   ## Prepare the filter for an engine step: the build-wide stale set,
@@ -71,25 +86,6 @@ proc ensure_render_filter*(state: State, step: Step) =
     for item in state.render_state:
       if item.source_path in state.changed_sources:
         state.render_filter.pages.incl(item.output_path)
-
-  # Pages that read files outside the context (git_sha) render when a
-  # file they read, or anything inside a directory they read, changed.
-  if state.context.file_dependencies.len > 0:
-    var touched: seq[string] = @[]
-    for path in state.changed_sources & state.removed_sources:
-      touched.add(normalizedPath(state.config.directories.src / path))
-    for path in state.changed_content:
-      touched.add(normalizedPath(path))
-    if touched.len > 0:
-      for item in state.render_state:
-        if item.output_path in state.context.file_dependencies and
-           item.source_path.matches(step_glob):
-          block check:
-            for dependency in state.context.file_dependencies[item.output_path]:
-              for path in touched:
-                if path.isRelativeTo(dependency):
-                  state.render_filter.pages.incl(item.output_path)
-                  break check
 
   # Route-set diff: compare this step's pages with the previous build's.
   # Runs for full builds too, so a deleted template's pages get unlinked.
@@ -125,7 +121,6 @@ proc ensure_render_filter*(state: State, step: Step) =
         removeFile(path)
         notice "Removed page: ", output
       state.removed_outputs.add(output)
-      state.context.file_dependencies.del(output)
 
   if not state.render_filter.all and state.changed_content.len > 0:
     var pages = toSeq(state.render_filter.pages)

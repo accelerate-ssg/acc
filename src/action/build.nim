@@ -6,6 +6,7 @@ import change_set
 import action/run_workflow
 import action/internal_functions/yaml_loader
 import types/render_state/file_list
+import plugins/git_filter
 
 proc cache_file(state: State): string =
   if state.config.directories.work == "": ""
@@ -44,6 +45,9 @@ proc build*( state: State, source_files: seq[string] ) =
   ## Builds exactly the files the caller names. Each workflow still narrows this
   ## list by its own step globs, so a step only ever sees what it asked for.
   state.source_files = source_files
+  # Shas are resolved afresh each build; the arena keeps the previous ones
+  # so only a changed sha counts as a write.
+  reset_git_lookup( state.context, state.config.directories.root )
 
   # Selective rendering state for this build: narrow only when there is
   # something to narrow by.

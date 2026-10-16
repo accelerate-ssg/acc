@@ -18,14 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   site lives in; a directory gives its tree's sha. Uncommitted edits do not
   change the sha. A file that exists but is not in the checked-out commit
   renders an empty sha with a warning, while a path that does not exist, or a
-  site outside a git repository, fails the page. Each page records the files it
-  looked up, since the arena's read tracking cannot see them, so a selective
-  build (`--using=git`, `--using=mtime`, or a dev server rebuild) that changes
-  one of those files re-renders the page instead of keeping the old sha.
+  site outside a git repository, fails the page. The shas live in the arena,
+  each written by its file's own consumer and read by the page that renders
+  it, so dependency tracking covers them like any content: a selective build
+  (`--using=git`, `--using=mtime`, or a dev server rebuild) whose changes alter
+  a file's sha re-renders exactly the pages that read it — an `index.html` that
+  cache-busts its stylesheets re-renders when one of them is committed, and not
+  for an uncommitted edit, which leaves the sha as it was.
 
 ### Changed
 
-- The context cache format is version 3, to persist those file dependencies.
+- The context cache format is version 3, to persist the file shas.
   The first build after upgrading ignores the old cache with a warning and
   builds everything.
 

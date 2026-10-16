@@ -38,11 +38,12 @@ type
     ## what route-set diffing compares against to find pages that
     ## appeared or disappeared.
     previous_outputs*: seq[tuple[source: string, output: string]]
-    ## Output path -> the files that page read outside the context (the
-    ## git_sha filter), as absolute paths under the project root. Pages
-    ## record dependencies the arena cannot track here, so a selective
-    ## build that changes one of the files re-renders the page.
-    file_dependencies*: Table[string, seq[string]]
+    ## Values derived from files rather than loaded from content — the
+    ## git_sha filter's shas, keyed by the file's absolute path. A detached
+    ## object, not bound under root, so templates and whole-context reads
+    ## never see it; a page that reads an entry records the read like any
+    ## other, which is what lets a changed file invalidate the page.
+    files*: NodeId
 
 let path_regex = re"^(.+)\[(\d*)\]$"
 
@@ -50,6 +51,7 @@ proc newContextStore*(): ContextStore =
   new(result)
   result.arena = initArena()
   result.root = result.arena.newObj()
+  result.files = result.arena.newObj()
   result.consumer_names = @[]
   result.consumer_ids = initTable[string, uint32]()
 
@@ -309,7 +311,7 @@ proc readStr(s: Stream): string =
 
 proc saveCache*(ctx: ContextStore, path: string, stamp: Time) =
   ## Persist the context — tree, origins, access log, consumer labels,
-  ## the previous build's routed pages, the pages' file dependencies —
+  ## the previous build's routed pages, the file-derived values —
   ## with the build stamp that mtime-based change detection compares
   ## against.
   createDir(path.parentDir)
@@ -326,12 +328,7 @@ proc saveCache*(ctx: ContextStore, path: string, stamp: Time) =
   for (source, output) in ctx.previous_outputs:
     s.writeStr(source)
     s.writeStr(output)
-  s.write(uint32(ctx.file_dependencies.len))
-  for output, paths in ctx.file_dependencies:
-    s.writeStr(output)
-    s.write(uint32(paths.len))
-    for path in paths:
-      s.writeStr(path)
+  s.write(uint32(ctx.files))
   ctx.arena.saveArena(s)
 
 proc loadCache*(path: string): Option[tuple[store: ContextStore, stamp: Time]] =
@@ -359,16 +356,10 @@ proc loadCache*(path: string): Option[tuple[store: ContextStore, stamp: Time]] =
       let source = s.readStr()
       let output = s.readStr()
       outputs.add((source, output))
-    var dependencies = initTable[string, seq[string]]()
-    for i in 0 ..< int(s.readUint32()):
-      let output = s.readStr()
-      var paths: seq[string] = @[]
-      for j in 0 ..< int(s.readUint32()):
-        paths.add(s.readStr())
-      dependencies[output] = paths
+    let files = NodeId(s.readUint32())
     let store = ContextStore(arena: loadArena(s), root: root,
                              previous_outputs: outputs,
-                             file_dependencies: dependencies)
+                             files: files)
     for name in names:
       discard store.consumer(name)
     result = some((store, stamp))

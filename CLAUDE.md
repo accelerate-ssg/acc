@@ -99,9 +99,12 @@ Accelerate (Acc) is a static site generator implemented in Nim. It uses a workfl
   YAML loader, since the render pass overwrites it.
 - acc registers its own Liquid filters into pitchfork's shared filter registry:
   `git_filter.nim` adds `git_sha` (a repository path's short object id at
-  `HEAD`, which shallow and full clones agree on). A filter reads outside the context, so it records the files
-  per page in `ContextStore.file_dependencies`, which `render_filter.nim`
-  matches against a selective build's changed and removed files
+  `HEAD`, which shallow and full clones agree on). Its shas live in the arena,
+  in `ContextStore.files` — an object detached from the context root, so no
+  template or whole-context read sees it — each written by an `@file <path>`
+  consumer and read under the rendering page's consumer. `compute_stale` in
+  `render_filter.nim` refreshes the shas of changed files and queries those
+  writers with `invalidatedBy`, as it does `@load` writers for content
 
 **Template Engine** (`../pitchfork/`):
 - One bytecode VM with per-language frontends ("tines") under `pitchfork/tines/`
