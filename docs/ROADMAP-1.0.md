@@ -275,9 +275,9 @@ has a test.
    `{.compile.}` with a thin Nim wrapper.
    - Vendor md4c at a pinned tag.
    - Write the wrapper and swap the `@markdown` step to use it.
-   - Move acc's own `std/re` uses (`src/config.nim`,
-     `src/types/context_store.nim`) to `nim-regex`, or the check below
-     still finds libpcre.
+   - Merge the pending removals of acc's and pitchfork's direct `std/re`
+     imports to their `main` branches; until then the check below still
+     finds libpcre.
    - Compare output on helmaskin.se and hagges.se (output hashes or a diff).
    - Verify: `strings acc | grep -i libpcre` prints nothing.
    - Related: tag new releases of `arena` and `pitchfork` with their
