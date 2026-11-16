@@ -1,0 +1,8 @@
+<!DOCTYPE html>
+<html>
+  {{> partials/head}}
+  <body>
+    <p>{{sv.general.greeting}}</p>
+    <ul>{{#posts}}<li><a href="/posts/{{slug}}.html">{{title}}</a></li>{{/posts}}</ul>
+  </body>
+</html>

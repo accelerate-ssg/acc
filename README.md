@@ -121,8 +121,16 @@ one.
 
 1. Place the binary in your path, for instance in `~/bin`.
 
-The macOS and Linux binaries carry pcre, so nothing has to be installed
-alongside them.
+### Windows
+
+1. Download `acc-windows.exe`, rename it `acc.exe` and place it in a directory
+   on your `PATH`.
+
+`command` steps run through `cmd.exe`, so a site whose workflows call sh
+tools (`rm`, `cp -r`, `$VAR`) needs those steps rewritten, or acc run under
+WSL with the Linux binary.
+
+Every binary carries pcre, so nothing has to be installed alongside it.
 
 ## Usage
 

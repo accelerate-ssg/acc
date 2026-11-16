@@ -5,7 +5,7 @@ on:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
     branches:
-      - development
+      - "**"
 
 jobs:
   build:
@@ -96,6 +96,37 @@ jobs:
           done
           echo "PCRE_FLAGS=$PCRE_FLAGS" >> "$GITHUB_ENV"
 
+      # Built from source with the gcc Nim compiles with: MSYS2's archive is
+      # made by another toolchain and expects its runtime. Without this the
+      # exe looks for pcre64.dll at startup and exits when it is not there.
+      # -static keeps the MinGW runtime DLLs out as well.
+      - name: Build the static pcre (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          PCRE_DIR="$(cygpath -m "$RUNNER_TEMP")/pcre-8.45"
+          cd "$RUNNER_TEMP"
+          curl -sSfL -o pcre.tar.bz2 \
+            https://downloads.sourceforge.net/project/pcre/pcre/8.45/pcre-8.45.tar.bz2
+          echo "4dae6fdcd2bb0bb6c37b5f97c33c2be954da743985369cddac3546e3218bffb8  pcre.tar.bz2" \
+            | sha256sum -c -
+          tar xjf pcre.tar.bz2
+          cd pcre-8.45
+          cp pcre.h.generic pcre.h
+          cp config.h.generic config.h
+          cp pcre_chartables.c.dist pcre_chartables.c
+          for source in byte_order chartables compile config dfa_exec exec \
+                        fullinfo get globals jit_compile maketables newline \
+                        ord2utf8 refcount string_utils study tables ucd \
+                        valid_utf8 version xclass; do
+            gcc -O2 -c -DHAVE_CONFIG_H -DPCRE_STATIC -DSUPPORT_UTF -DSUPPORT_UCP \
+              -I. "pcre_$source.c" -o "pcre_$source.o"
+          done
+          ar rcs libpcre.a pcre_*.o
+          PCRE_FLAGS="-d:usePcreHeader --passL:$PCRE_DIR/libpcre.a --passC:-I$PCRE_DIR"
+          PCRE_FLAGS="$PCRE_FLAGS --passC:-DPCRE_STATIC --passL:-static"
+          echo "PCRE_FLAGS=$PCRE_FLAGS" >> "$GITHUB_ENV"
+
       - name: Install Nim dependencies (non-Windows)
         if: runner.os != 'Windows'
         run: nimble install -y
@@ -124,8 +155,41 @@ jobs:
 
       - name: Build executable (Windows)
         if: runner.os == 'Windows'
+        shell: bash
         run: |
-          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release --passC:-Wno-incompatible-pointer-types
+          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release --passC:-Wno-incompatible-pointer-types $PCRE_FLAGS
+
+      # pcre loaded through LoadLibrary would not show up here; the smoke
+      # build below is what catches that.
+      - name: Check the exe imports only system DLLs (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          objdump -p ./acc.exe | grep "DLL Name" | tee dlls.txt
+          if grep -iE "pcre|libwinpthread|libgcc|libstdc" dlls.txt; then
+            echo "acc.exe depends on a DLL that is not shipped with it"
+            exit 1
+          fi
+
+      - name: Test path and condition handling (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          for suite in src/portable_path.nim src/workflow_condition.nim \
+                       src/page_context.nim test/render_paths.nim \
+                       test/path_router_spec.nim test/change_sets.nim; do
+            nim c -r --hints:off -p:src --threads:on --mm:orc --deepcopy:on \
+              --passC:-Wno-incompatible-pointer-types $PCRE_FLAGS "$suite"
+          done
+
+      - name: Build the smoke site
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            test/smoke_site.sh ./acc.exe
+          else
+            test/smoke_site.sh ./acc
+          fi
 
       # Renamed before upload, not merely placed in a per-platform directory:
       # a GitHub release is a flat namespace, so three artifacts all called
@@ -148,8 +212,11 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: ./${{ matrix.artifact_name }}
 
+  # Any branch builds and smoke-tests, and its binaries can be downloaded
+  # from the run; only development and tags publish a release.
   create-release:
     needs: build
+    if: github.ref == 'refs/heads/development' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
 
     steps:

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `acc-windows.exe` starts on a machine without pcre. Only the macOS and Linux
+  builds were linked against a static archive; the Windows one looked for
+  `pcre64.dll` at startup. CI now builds pcre 8.45 from source with the gcc
+  Nim compiles with, and links it and the MinGW runtime statically, so the exe
+  is the whole install.
 - Sites build on Windows. Paths relative to the source and content
   directories came back from the OS with `\`, and everything downstream
   assumes `/`: content in `content/sv/pages.yaml` landed at the context key

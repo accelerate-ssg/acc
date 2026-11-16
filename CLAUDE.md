@@ -24,6 +24,9 @@ nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/page_context.nim
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/portable_path.nim
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/workflow_condition.nim
 
+# End-to-end: build test/smoke_site with a built binary and check its output
+test/smoke_site.sh ./acc
+
 # Run standalone test suites
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/config.nim
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on test/test_cli.nim

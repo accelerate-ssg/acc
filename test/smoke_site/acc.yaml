@@ -1,0 +1,30 @@
+manifest_version: v1
+
+directories:
+  src: src
+  destination: public
+  content: content
+  config: .acc
+  work: .acc/work
+  scripts: scripts
+  build: .acc/build
+
+workflows:
+  - name: build
+    workflows:
+      - load
+      - render
+
+  - name: load
+    steps:
+      - module: '@copy'
+        glob: '**/*.css'
+      - module: '@yaml'
+        glob: '**/*.{yml,yaml,json}'
+
+  - name: render
+    steps:
+      - module: '@mustache'
+        glob: '**/*.mustache'
+        partial_directories:
+          - 'src/partials'
