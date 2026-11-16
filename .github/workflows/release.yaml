@@ -126,19 +126,20 @@ jobs:
           fi
           echo "PCRE_FLAGS=$PCRE_FLAGS" >> "$GITHUB_ENV"
 
-      - name: Install Nim dependencies (non-Windows)
-        if: runner.os != 'Windows'
+      - name: Install Nim dependencies (macOS)
+        if: runner.os == 'macOS'
         run: nimble install -y
 
-      - name: Install Nim dependencies (Windows)
-        if: runner.os == 'Windows'
+      # gcc 14 and later reject the pointer casts in docopt's generated C.
+      - name: Install Nim dependencies (Linux, Windows)
+        if: runner.os != 'macOS'
         run: nimble install -y --passC:-Wno-incompatible-pointer-types
 
       - name: Build executable (Linux)
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release $PCRE_FLAGS
+          nimble build -p:src --threads:on --mm:orc --deepcopy:on -d:release --passC:-Wno-incompatible-pointer-types $PCRE_FLAGS
 
       - name: Build executable (macOS ARM64)
         if: matrix.os == 'macos-latest'
