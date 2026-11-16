@@ -23,7 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   platform and globs match the same way everywhere, case sensitively. Hidden
   files are recognised by their leading dot on Windows too, so `.git` is no
   longer walked as source. Debug logging no longer crashes on Windows, where
-  it looked for `/src/` in a path written with `\`.
+  it looked for `/src/` in a path written with `\`. And `--using=git` sees
+  what changed: on Windows the NUL-separated output it asks git for came
+  back with every NUL turned into a newline, so no modified or deleted file
+  was recognised. Nor is a line-ending warning from git, common on Windows,
+  read as part of that output any longer, where it could turn a deleted file
+  into a changed one.
 - A workflow's `if:` no longer shells out to `test`, which Windows does not
   have, and which refuses `==` wherever `/bin/sh` is dash (Debian, Ubuntu).
   acc evaluates it itself: `$VAR` and `${VAR}` expand from the

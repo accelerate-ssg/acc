@@ -17,7 +17,7 @@
 ## classify() turns a change set into a build decision, shared by every
 ## consumer so CLI builds and dev rebuilds treat changes identically.
 
-import std/[os, osproc, strutils, times]
+import std/[os, osproc, streams, strutils, times]
 
 import logger
 import config
@@ -54,17 +54,31 @@ type
 proc fullChangeSet*(): ChangeSet =
   ChangeSet(full: true)
 
+proc git(root: string, args: varargs[string]): tuple[output, errors: string, code: int] =
+  ## execCmdEx reads its output line by line, and on Windows that stops at
+  ## each NUL in git's -z output, which arrives as newlines instead.
+  ## Warnings are kept out of the output, where they would read as paths.
+  ## The per-file line-ending ones are switched off, being the only kind that
+  ## comes in numbers and could fill the error pipe before it is read.
+  let process = startProcess("git",
+                             args = @["-C", root, "-c", "core.safecrlf=false"] & @args,
+                             options = {poUsePath})
+  defer: process.close()
+  result.output = process.outputStream.readAll()
+  result.errors = process.errorStream.readAll()
+  result.code = process.waitForExit()
+
 proc gitChangeSet*(cfg: Config, since: string = "HEAD"): ChangeSet =
   ## Everything git reports as different between `since` and the working
   ## tree, plus untracked files. Runs in the project root; a repository
   ## is required.
   let root = cfg.directories.root
 
-  let (diffOut, diffCode) = execCmdEx(
-    "git -C " & quoteShell(root) & " diff --name-status -z -M " & quoteShell(since))
+  let (diffOut, diffErrors, diffCode) =
+    git(root, "diff", "--name-status", "-z", "-M", since)
   if diffCode != 0:
     raise newException(ValueError,
-      "git diff against '" & since & "' failed in " & root & ": " & diffOut.strip)
+      "git diff against '" & since & "' failed in " & root & ": " & diffErrors.strip)
 
   var tokens = diffOut.split('\0')
   var i = 0
@@ -91,8 +105,8 @@ proc gitChangeSet*(cfg: Config, since: string = "HEAD"): ChangeSet =
         result.changed.add(root / tokens[i + 1])
       i += 2
 
-  let (untrackedOut, untrackedCode) = execCmdEx(
-    "git -C " & quoteShell(root) & " ls-files --others --exclude-standard -z")
+  let (untrackedOut, _, untrackedCode) =
+    git(root, "ls-files", "--others", "--exclude-standard", "-z")
   if untrackedCode == 0:
     for path in untrackedOut.split('\0'):
       if path.len > 0:

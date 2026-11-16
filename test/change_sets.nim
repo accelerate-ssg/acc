@@ -65,6 +65,17 @@ suite "Change sets - git strategy":
     check (root / "src" / "about.mustache") in cs.removed
     check (root / "src" / "about-us.mustache") in cs.changed
 
+  test "git's line-ending warnings are not read as paths":
+    # The warning precedes all output, so it lands on the first status.
+    let root = scratchRepo()
+    doAssert execCmd("git -C " & root & " config core.autocrlf true") == 0
+    writeFile(root / "src" / "index.mustache", "changed\n")
+    removeFile(root / "src" / "about.mustache")
+
+    let cs = gitChangeSet(siteConfig(root))
+    check cs.changed == @[root / "src" / "index.mustache"]
+    check cs.removed == @[root / "src" / "about.mustache"]
+
   test "an unknown ref raises":
     let root = scratchRepo()
     expect ValueError:
