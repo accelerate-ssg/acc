@@ -22,6 +22,7 @@ nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/types/render_state/file_
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/types/render_state/file_list.nim
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/page_context.nim
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/portable_path.nim
+nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/workflow_condition.nim
 
 # Run standalone test suites
 nim c -r -p:src --threads:on --mm:orc --deepcopy:on src/config.nim

@@ -18,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   platform and globs match the same way everywhere, case sensitively. Hidden
   files are recognised by their leading dot on Windows too, so `.git` is no
   longer walked as source.
+- A workflow's `if:` no longer shells out to `test`, which Windows does not
+  have, and which refuses `==` wherever `/bin/sh` is dash (Debian, Ubuntu).
+  acc evaluates it itself: `$VAR` and `${VAR}` expand from the
+  environment, and `=`, `==`, `!=`, `-n`, `-z`, `-e`, `-f`, `-d` and a bare
+  value behave as `test` defines them. Anything else is an error rather than
+  a silently false condition, and that includes what the shell would have
+  expanded before `test` saw it: `$(...)`, backticks, `${VAR:-default}` and
+  `~`.
 
 ## [0.2.4] - 2026-10-09
 

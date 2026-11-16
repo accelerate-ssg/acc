@@ -8,6 +8,7 @@ import modules/script_runner/[types, loader, runner]
 import action/internal_functions/[copy, yaml_loader, markdown_renderer]
 import action/internal_functions/step_helpers as sh
 import plugins/registry
+import workflow_condition
 import types/render_state/calculate
 
 const dynlibExts = [".dll", ".so", ".dylib"]
@@ -34,12 +35,6 @@ proc findWorkflow*(config: Config, name: string): Workflow =
     if wf.name == name:
       return wf
   raise newException(KeyError, "Workflow not found: " & name)
-
-proc evaluateCondition*(condition: string): bool =
-  if condition == "":
-    return true
-  let exitCode = execCmd("test " & condition)
-  return exitCode == 0
 
 proc setWorkflowEnv(workflow: Workflow) =
   for envEntry in workflow.env:
