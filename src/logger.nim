@@ -54,11 +54,16 @@ template colored_printline*( color: Color, header: string, message: string, cont
 template posInfo*(): (string, int, int) =
   instantiationInfo(fullPaths = true)
 
+proc source_path*(filename: string): string =
+  ## The part of a compile-time path from `/src/` on, or all of it when it
+  ## has none.
+  let filename = filename.replace('\\', '/')
+  let index = filename.rfind("/src/")
+  if index >= 0: filename[index .. ^1] else: filename
+
 template echo_with_line_info*( args: varargs[untyped] ) =
   let (filename, line, column) = instantiationInfo(fullPaths = true)
-  let index = filename.rfind("/src/")
-  let local_path = filename[index .. ^1]
-  echo local_path, "(", line, ",", column, "): ", args
+  echo filename.source_path, "(", line, ",", column, "): ", args
 
 # Structured logger instance
 var logger*: StructuredLogger

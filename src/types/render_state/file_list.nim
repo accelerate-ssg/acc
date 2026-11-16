@@ -17,8 +17,8 @@ proc init_blacklist*(
   config_directory: string
 ): seq[ Glob ] =
   let
-    destination_is_child_of_source = destination_directory.starts_with( source_directory )
-    config_is_child_of_source = config_directory.starts_with( source_directory )
+    destination_is_child_of_source = destination_directory.is_relative_to( source_directory )
+    config_is_child_of_source = config_directory.is_relative_to( source_directory )
     relative_accelerate_directory = source_directory / ".acc"
 
   result = @[]
@@ -87,7 +87,7 @@ proc init_partial_globs*( cfg: Config ): seq[ Glob ] =
       for directory_node in step.extraConfig[ "partial_directories" ]:
         let directory = cfg.directories.root / directory_node.getStr
 
-        if not directory.starts_with( cfg.directories.src ):
+        if not directory.is_relative_to( cfg.directories.src ):
           continue
 
         let relative_path = directory.relative_to( cfg.directories.src )

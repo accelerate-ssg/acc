@@ -60,8 +60,7 @@ template fatal*(parts: varargs[string, `$`]) =
 template debug*( parts: varargs[string, `$`] ) =
   if log_level <= lvlDebug:
     let (filename, line, column) = instantiation_info(full_paths = true)
-    let index = filename.rfind("/src/")
-    let path = filename[index .. ^1]
+    let path = filename.source_path
     let context = get_parsing_context()
     let context_string = " in context \"$#\" from $#($#,$#)\n"
 

@@ -1,5 +1,5 @@
 import json, strutils, sequtils, sugar, os, sets, unittest
-import glob
+import portable_path
 
 import logger
 import config
