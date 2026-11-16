@@ -22,6 +22,7 @@ import std/[os, osproc, strutils, times]
 import logger
 import config
 import types/render_state/file_list
+import portable_path
 
 type
   ChangeSet* = object
@@ -123,7 +124,7 @@ proc classify*(cfg: Config, change_set: ChangeSet): BuildDecision =
 
   for path in change_set.changed:
     if src != "" and path.isRelativeTo(src):
-      let relative = path.relativePath(src)
+      let relative = path.relative_to(src)
       if cfg.is_partial(relative):
         return BuildDecision(full: true,
           reason: "partial changed: " & relative)
@@ -137,7 +138,7 @@ proc classify*(cfg: Config, change_set: ChangeSet): BuildDecision =
 
   for path in change_set.removed:
     if src != "" and path.isRelativeTo(src):
-      result.removed_sources.add(path.relativePath(src))
+      result.removed_sources.add(path.relative_to(src))
     elif content != "" and path.isRelativeTo(content):
       result.removed_content.add(path)
     else:

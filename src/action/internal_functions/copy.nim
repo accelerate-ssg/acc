@@ -1,5 +1,5 @@
 import std/[os, times, sets]
-import glob
+import portable_path
 
 import logger
 
@@ -37,7 +37,7 @@ proc run*(step: Step) =
 
   for absolute_path in walk_dir_rec( source_directory ):
     let
-        relative_path = absolute_path.relative_path( source_directory )
+        relative_path = absolute_path.relative_to( source_directory )
         destination_path = destination_directory / relative_path
 
     if relative_path.matches(glob):

@@ -1,5 +1,5 @@
 import os, json
-import glob
+import portable_path
 
 import logger
 import global_state
@@ -20,7 +20,7 @@ iterator each*(paths: openArray[string]): tuple[absolute: string, relative: stri
   for path in paths:
     let
       absolute_path = path
-      relative_path = relativePath(absolute_path, root)
+      relative_path = absolute_path.relative_to(root)
       matches = if match_relative: relative_path.matches(pattern) else: absolute_path.matches(pattern)
 
     if match_relative:

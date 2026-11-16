@@ -24,6 +24,7 @@ import global_state
 import logger
 import build
 import change_set
+import portable_path
 import fswatch
 
 import dev_server/mime_types
@@ -56,7 +57,7 @@ proc html_tree_from_dir(dir: string, path_prefix: string = "/"): string =
   for dir_path in walk_dir(dir):
     if not dir_path.path.dir_exists:
       continue
-    let relative_path = dir_path.path.substr(dir.len + 1)
+    let relative_path = dir_path.path.substr(dir.len + 1).portable
     result.add "<li class=\"directory\"><input type=\"checkbox\"/><span>" & relative_path & "</span>\n"
     result.add html_tree_from_dir(dir_path.path, path_prefix & relative_path & "/")
     result.add "</li>\n"

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Sites build on Windows. Paths relative to the source and content
+  directories came back from the OS with `\`, and everything downstream
+  assumes `/`: content in `content/sv/pages.yaml` landed at the context key
+  `sv\pages`, a partial was registered as `partials\header` so
+  `{{> partials/header}}` did not resolve, and the glob library switches to
+  DOS mode on Windows. Relative paths are now written with `/` on every
+  platform and globs match the same way everywhere, case sensitively. Hidden
+  files are recognised by their leading dot on Windows too, so `.git` is no
+  longer walked as source.
+
 ## [0.2.4] - 2026-10-09
 
 ### Added

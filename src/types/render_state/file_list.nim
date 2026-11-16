@@ -1,5 +1,5 @@
 import os
-import glob
+import portable_path
 import strutils
 import sequtils
 import sets
@@ -25,7 +25,7 @@ proc init_blacklist*(
 
   if destination_is_child_of_source:
     let
-      relative_destination_path = relativePath( destination_directory, source_directory )
+      relative_destination_path = destination_directory.relative_to( source_directory )
 
     if relative_destination_path != "." and destination_directory.dir_exists():
       debug "Adding " & relative_destination_path & "/* to blacklist"
@@ -33,7 +33,7 @@ proc init_blacklist*(
 
   if config_is_child_of_source:
     let
-      relative_config_path = relativePath( config_directory, source_directory )
+      relative_config_path = config_directory.relative_to( source_directory )
     if relative_config_path != "." and config_directory.dir_exists():
       debug "Adding " & relative_config_path & "/* to blacklist"
       result.add( glob( relative_config_path & "/**/*" ))
@@ -46,10 +46,7 @@ proc init_blacklist*(
 proc init_raw_file_list*( source_directory: string ): HashSet[ string ] =
   result = init_hash_set[string]()
 
-  for source_path in walk_glob( source_directory & "**/*" ):
-    let
-      relative_path = relative_path( source_path, source_directory )
-
+  for relative_path in walk_relative( source_directory ):
     result.incl relative_path
 
 
@@ -93,7 +90,7 @@ proc init_partial_globs*( cfg: Config ): seq[ Glob ] =
         if not directory.starts_with( cfg.directories.src ):
           continue
 
-        let relative_path = relativePath( directory, cfg.directories.src )
+        let relative_path = directory.relative_to( cfg.directories.src )
 
         if relative_path != ".":
           debug "Adding " & relative_path & "/* to the partial directories"

@@ -1,5 +1,5 @@
 import os, osproc, json, strutils, times, options
-import glob
+import portable_path
 
 import logger
 import global_state

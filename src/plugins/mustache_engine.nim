@@ -1,5 +1,5 @@
 import std/[os, json, strutils, tables]
-import glob
+import portable_path
 import pitchfork/mustache_lib
 
 import global_state
@@ -32,7 +32,7 @@ proc load_partials(step: Step, config: Config): Table[string, string] =
     if dir.dirExists:
       for path in walkDirRec(dir):
         if path.endsWith(".mustache"):
-          let name = path.relativePath(dir).changeFileExt("")
+          let name = path.relative_to(dir).changeFileExt("")
           if name notin result:
             result[name] = readFile(path)
 

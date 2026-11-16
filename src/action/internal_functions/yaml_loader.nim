@@ -1,7 +1,7 @@
 import std/[json, os, strutils]
 import yaml/[tojson, native, parser]
 import logger
-import glob
+import portable_path
 
 import global_state
 import config
@@ -116,7 +116,8 @@ proc run*(step: Step) =
   var stack = newKeyStack()
   stack.add_dotted_path(context_path_prefix)
 
-  for file in walk_dir_rec(content_dir, relative = true):
+  for native in walk_dir_rec(content_dir, relative = true):
+    let file = native.portable
     if file.matches(glob):
       notice "Parsing: ", file
       stack.parse(content_dir / file, file)
@@ -129,7 +130,7 @@ proc unload*(absolute_path: string) =
   let content_dir = state.config.directories.content
   if content_dir == "" or not absolute_path.isRelativeTo(content_dir):
     return
-  let relative_path = absolute_path.relativePath(content_dir)
+  let relative_path = absolute_path.relative_to(content_dir)
 
   var prefix = ""
   for workflow in state.config.workflows:

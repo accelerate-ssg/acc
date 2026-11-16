@@ -1,5 +1,5 @@
 import std/[os, json, strutils, tables]
-import glob
+import portable_path
 
 import global_state
 import config
@@ -31,7 +31,7 @@ proc load_partials(step: Step, config: Config): Table[string, string] =
     if dir.dirExists:
       for path in walkDirRec(dir):
         if path.endsWith(".html") or path.endsWith(".liquid"):
-          let name = path.relativePath(dir)
+          let name = path.relative_to(dir)
           result[name] = readFile(path)
 
 proc overlay_for(arena: Arena, nodes: seq[NodeId]): VMValue =

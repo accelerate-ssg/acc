@@ -22,7 +22,7 @@
 ## With no previous build to narrow against, everything renders.
 
 import std/[sets, os, strutils, algorithm, sequtils]
-import glob
+import portable_path
 
 import logger
 import config
