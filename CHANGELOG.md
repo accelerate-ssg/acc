@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-11-17
+
 ### Fixed
 
 - `acc-windows.exe` starts on a machine without pcre. Only the macOS and Linux
@@ -230,5 +232,6 @@ audited against this line; the outcome:
 - Static templates now correctly populate `item` from matching context key. For example, `about.mustache` will have `item` set to the value of `about` in the context, allowing `{{item.name}}` to work as expected. This restores behavior that was broken in 0.1.0.
 - Dynamic templates with object-based collections now correctly populate `item`. For example, `products/{products}.mustache` with context `{ "products": { "widget": { "name": "Widget" } } }` will have `item` set to the product object.
 
-[Unreleased]: https://github.com/accelerate-ssg/acc/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/accelerate-ssg/acc/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/accelerate-ssg/acc/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/accelerate-ssg/acc/compare/v0.2.3...v0.2.4
