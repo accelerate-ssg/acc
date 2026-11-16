@@ -213,6 +213,10 @@ nimble build -d:release -p:src --threads:on --mm:orc --deepcopy:on \
   -d:usePcreHeader --passL:"$(gcc -print-file-name=libpcre.a)"
 ```
 
+Ubuntu 26.04 and Windows have no such package; there, build pcre 8.45 from
+source as the "Build the static pcre" step in
+`.github/workflows/release.yaml` does, and pass the flags it sets.
+
 The pcre flags link the regex engine into the binary instead of leaving it
 to be found at run time. Without them the binary looks for a shared pcre on
 startup, and the name it tries first (`libpcre.3.dylib`, the Debian soname)
