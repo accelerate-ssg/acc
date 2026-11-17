@@ -42,7 +42,3 @@ test/arena_loading
 test/change_sets
 test/path_router_spec
 test/legacy_config
-
-# Output of the smoke build
-test/smoke_site/public
-test/smoke_site/.acc

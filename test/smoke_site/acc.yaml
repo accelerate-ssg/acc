@@ -28,3 +28,7 @@ workflows:
         glob: '**/*.mustache'
         partial_directories:
           - 'src/partials'
+      - module: '@liquid'
+        glob: '**/*.liquid'
+        partial_directories:
+          - 'src/partials'
