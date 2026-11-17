@@ -75,7 +75,7 @@ proc gitChangeSet*(cfg: Config, since: string = "HEAD"): ChangeSet =
   let root = cfg.directories.root
 
   let (diffOut, diffErrors, diffCode) =
-    git(root, "diff", "--name-status", "-z", "-M", since)
+    git(root, "diff", "--relative", "--name-status", "-z", "-M", since)
   if diffCode != 0:
     raise newException(ValueError,
       "git diff against '" & since & "' failed in " & root & ": " & diffErrors.strip)

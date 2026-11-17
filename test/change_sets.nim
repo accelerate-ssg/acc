@@ -1,15 +1,17 @@
 ## Tests for change-set strategies and the classifier that turns a
 ## change set into a build decision.
 
-import std/[unittest, os, osproc, times, json, sequtils, strutils]
+import std/[unittest, os, osproc, times, json, sequtils, strutils, algorithm]
 
 import config
 import change_set
 
-proc scratchRepo(): string =
-  ## A throwaway git repository with a site-shaped tree and one commit.
-  result = getTempDir() / "acc_change_set_test"
-  removeDir(result)
+proc scratchRepo(site = ""): string =
+  ## A throwaway git repository with a site-shaped tree, in `site` below its
+  ## top level, and one commit.
+  let repo = getTempDir() / "acc_change_set_test"
+  removeDir(repo)
+  result = repo / site
   createDir(result / "src" / "partials")
   createDir(result / "content")
   writeFile(result / "src" / "index.mustache", "one")
@@ -18,9 +20,9 @@ proc scratchRepo(): string =
   writeFile(result / "content" / "site.yaml", "name: x")
   writeFile(result / "acc.yaml", "manifest_version: v1")
   for cmd in [
-    "git -C " & result & " init -q",
-    "git -C " & result & " add .",
-    "git -C " & result & " -c user.email=t@t -c user.name=t commit -qm base",
+    "git -C " & repo & " init -q",
+    "git -C " & repo & " add .",
+    "git -C " & repo & " -c user.email=t@t -c user.name=t commit -qm base",
   ]:
     doAssert execCmd(cmd) == 0
 
@@ -64,6 +66,18 @@ suite "Change sets - git strategy":
     let cs = gitChangeSet(siteConfig(root))
     check (root / "src" / "about.mustache") in cs.removed
     check (root / "src" / "about-us.mustache") in cs.changed
+
+  test "a site below the repository's top level is rooted at the site":
+    let root = scratchRepo("site")
+    writeFile(root / "src" / "index.mustache", "changed")
+    writeFile(root / "src" / "fresh.mustache", "new page")
+    removeFile(root / "src" / "about.mustache")
+    writeFile(root.parentDir / "outside.txt", "not the site's")
+
+    let cs = gitChangeSet(siteConfig(root))
+    check cs.changed.sorted == @[root / "src" / "fresh.mustache",
+                                 root / "src" / "index.mustache"]
+    check cs.removed == @[root / "src" / "about.mustache"]
 
   test "git's line-ending warnings are not read as paths":
     # The warning precedes all output, so it lands on the first status.

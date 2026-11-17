@@ -37,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a silently false condition, and that includes what the shell would have
   expanded before `test` saw it: `$(...)`, backticks, `${VAR:-default}` and
   `~`.
+- `--using=git` finds the changes of a site that is not at the top of its
+  repository. git names the files it diffs from the top level, and acc joined
+  them to the site root, so every change looked like one outside the site and
+  the build fell back to a full one.
 
 ## [0.2.4] - 2026-10-09
 
