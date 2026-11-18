@@ -40,6 +40,24 @@ nim c -r -p:src src/mustache_lib.nim
 Required system dependencies (macOS):
 - pcre: `brew install pcre`
 
+## Documentation
+
+User documentation lives in `docs/`, one file per topic, indexed from
+`README.md`. A change to behaviour a doc describes updates that doc in the
+same commit:
+
+| Doc | Follows |
+|---|---|
+| `docs/configuration.md` | `src/config/`, `src/action/run_workflow.nim`, `src/workflow_condition.nim` |
+| `docs/modules.md` | `src/action/internal_functions/`, `src/plugins/` |
+| `docs/content.md` | `src/action/internal_functions/yaml_loader.nim`, `key_stack.nim` |
+| `docs/routing.md` | `src/types/render_state/`, `test/path_router_spec.nim` |
+| `docs/templates.md` | `src/plugins/`, `src/page_context.nim` |
+| `docs/builds.md` | `src/action/build.nim`, `src/action/dev_server.nim`, `src/change_set.nim`, `src/render_filter.nim` |
+
+Examples in the docs use generic data (`posts`, `products`, `brands`), never
+a real site.
+
 ## Architecture
 
 Accelerate (Acc) is a static site generator implemented in Nim. It uses a workflow-based build pipeline where each step operates on shared state.
@@ -80,10 +98,11 @@ Accelerate (Acc) is a static site generator implemented in Nim. It uses a workfl
 **Render State** (`src/types/render_state/`):
 - Tracks files to process: source path, output path, render flag, item/items data
 - `calculate.nim` computes render state from config, steps, and context
-- `file_router.nim` handles path routing with three match types:
-  - `()` - Key match: expands to keys of object or indices of array
-  - `{attribute}` - Attribute match: expands to values of a named attribute
-  - `[attribute]` - Array match: expands to unique values from array attributes
+- `path_template.nim` parses a template path once into segments, and
+  `file_router.nim` expands them against the context. A binding is
+  `{[.]collection[(attribute = $key|$parent.x)][attribute[[]]]}`; the user
+  documentation is `docs/routing.md` and the specification is
+  `test/path_router_spec.nim`
 - `file_list.nim` generates relative file paths from source directory with glob filtering
 
 **File Watcher** (`src/fswatch.nim`):
@@ -118,6 +137,8 @@ Accelerate (Acc) is a static site generator implemented in Nim. It uses a workfl
   `runner.nim` wraps the calls
 - The library is optional — a build without it logs "Failed to load script
   runner" and carries on, so a site with no script steps needs nothing
+- A script step that cannot run (missing file, no runner, `.nims`, an error
+  in the script) fails like any other step, so `on_failure: continue` applies
 
 **Logger** (`src/logger.nim`):
 - Multi-format structured logger with color support
