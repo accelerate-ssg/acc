@@ -1,5 +1,5 @@
 import json
-import std/[times, options]
+import std/[times, options, sequtils]
 
 import global_state
 import logger
@@ -21,27 +21,31 @@ proc showMe(aspect: string) =
   of "config":
     echo pretty(%state.config)
   of "files":
-    # The leaf named "build" is the one whose file list is interesting.
-    # Taking the first leaf unconditionally picked whatever happened to be
-    # declared earliest — a content sync or preprocess workflow, whose steps
-    # carry no glob — and reported an empty list for a config that routes
-    # hundreds of pages. Fall back to the first leaf only if there is no
-    # "build".
-    var steps: seq[Step] = @[]
-    for wf in state.config.workflows:
-      if wf.isLeaf and wf.name == "build":
-        steps = wf.steps
-        break
-    if steps.len == 0:
-      for wf in state.config.workflows:
-        if wf.isLeaf:
-          steps = wf.steps
-          break
-    if steps.len > 0:
-      let files = init_file_list(state.config, steps, init_source_files(state.config))
-      echo pretty(%*files)
-    else:
-      echo "[]"
+    # Every workflow with steps that `acc build` would run, in run order,
+    # with the source files its globs match.
+    var
+      seen: seq[string] = @[]
+      leaves: seq[Workflow] = @[]
+    proc collect(wf: Workflow) =
+      if wf.name in seen: return
+      seen.add wf.name
+      if wf.isComposition:
+        for name in wf.workflows:
+          collect(findWorkflow(state.config, name))
+      elif wf.isLeaf:
+        leaves.add wf
+
+    var roots = state.config.workflows.filterIt(it.name == "build")
+    if roots.len == 0:
+      roots = state.config.workflows
+    for wf in roots:
+      collect(wf)
+
+    let source_files = init_source_files(state.config)
+    var files = newJObject()
+    for wf in leaves:
+      files[wf.name] = %init_file_list(state.config, wf.steps, source_files)
+    echo pretty(files)
   else:
     echo "Unknown --show-me aspect: \"" & aspect & "\""
     echo "Available: config, files"
