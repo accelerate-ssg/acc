@@ -84,37 +84,39 @@ proc runScriptStep(step: Step, state: State) =
                      else: state.config.directories.scripts / scriptPath
 
   if not resolvedPath.fileExists:
-    error "Script not found: ", resolvedPath
-    return
+    raise newException(IOError, "Script not found: " & resolvedPath)
 
   let ext = resolvedPath.splitFile.ext.toLowerAscii
   case ext:
   of ".nims":
-    notice "NimScript execution not yet connected to new workflow engine"
+    raise newException(ValueError,
+      "NimScript steps are not supported yet: " & resolvedPath)
   else:
     let scriptRunner = getScriptRunnerForFile(resolvedPath)
-    if scriptRunner != nil:
-      let scriptContent = readFile(resolvedPath)
-      try:
-        scriptRunner.create()
-        # Scripts receive a materialized JsonNode snapshot of the context
-        # and mutate it in place through the pointer, as they always have.
-        # The mutations are merged back into the store after the run.
-        let contextJson = state.context.toJson
-        let contextPtr = cast[pointer](contextJson)
-        let result = scriptRunner.eval(scriptContent, contextPtr)
-        state.context.applyScriptChanges(contextJson)
-        debug "Script result: ", $result
-      except JSException as e:
-        error "JavaScript error in ", resolvedPath, ": ", e.msg
-        if e.stacktrace != "":
-          error e.stacktrace
-      except CatchableError as e:
-        error "Error running script ", resolvedPath, ": ", e.msg
-      finally:
-        scriptRunner.destroy()
-    else:
-      error "No script runner available for extension: ", ext
+    if scriptRunner == nil:
+      raise newException(ValueError,
+        "No script runner available for extension " & ext & ": " & resolvedPath)
+    let scriptContent = readFile(resolvedPath)
+    try:
+      scriptRunner.create()
+      # Scripts receive a materialized JsonNode snapshot of the context
+      # and mutate it in place through the pointer, as they always have.
+      # The mutations are merged back into the store after the run.
+      let contextJson = state.context.toJson
+      let contextPtr = cast[pointer](contextJson)
+      let result = scriptRunner.eval(scriptContent, contextPtr)
+      state.context.applyScriptChanges(contextJson)
+      debug "Script result: ", $result
+    except JSException as e:
+      if e.stacktrace != "":
+        error e.stacktrace
+      raise newException(CatchableError,
+        "JavaScript error in " & resolvedPath & ": " & e.msg)
+    except CatchableError as e:
+      raise newException(CatchableError,
+        "Error running script " & resolvedPath & ": " & e.msg)
+    finally:
+      scriptRunner.destroy()
 
 proc stepLabel(step: Step): string =
   if step.module != "": step.module
