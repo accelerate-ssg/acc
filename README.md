@@ -59,6 +59,10 @@ The pipeline consists of a number of Nimscript scripts that are called in
 sequence. Each of these have access to the shared state and can pull from it or
 push to it as well as execute external commands.
 
+> Nimscript steps are not implemented yet; a step that names a `.nims` script
+> fails the build. For now the pipeline is built from the steps described in
+> [configuration](docs/configuration.md#steps).
+
 ### Sources
 
 The script based plugin system means that you can pull from basically anything.
@@ -139,54 +143,32 @@ acc build [ROOT_DIR]    # run the build workflow once
 acc dev [ROOT_DIR]      # build, then watch and serve (--port, else 1331+)
 acc run <workflow>      # run a single named workflow
 acc clean               # remove generated output
+acc init [ROOT_DIR]     # write a starting acc.yaml and its directories
 ```
 
-### Selective builds
+A site is a config, a tree of templates and a directory of content:
 
-By default `acc build` walks the whole source tree and renders everything.
-On a site with a lot of pages that is wasteful when only a handful of files
-have actually changed, so the build can instead be told what changed and
-render only the pages affected by it.
-
-`--using` picks how to find the changes:
-
-```sh
-acc build --using=git --since=origin/main
+```
+acc.yaml                      the directories and the workflows a build runs
+content/posts.yaml            a list of posts, each with a slug and a title
+src/index.liquid              ->  public/index.html
+src/blog/{posts[slug]}.liquid ->  public/blog/<slug>.html, one per post
+src/assets/site.css           ->  public/assets/site.css, copied as is
 ```
 
-That asks git for everything that differs between `origin/main` and the
-working tree - including untracked files - and builds only what those
-changes affect. It is the mode a CI or deploy server wants: the baseline is
-whatever the site looked like when it was last published, so a branch that
-touches one content file rebuilds one page.
+## Documentation
 
-`--since` takes any ref git understands and defaults to `HEAD`, which means
-"uncommitted work only". The strategy requires the project root to be a git
-repository.
-
-The other strategies are `--using=mtime`, which rebuilds files modified
-since the previous build's timestamp, and `--using=full` (the default),
-which rebuilds everything.
-
-`--using=mtime` needs the cache: the timestamp it compares against is the
-previous build's, which is stored there, so `--using=mtime --no-cache`
-reports that there is no baseline yet and exits without building.
-
-It also cannot see deletions on its own - a timestamp scan only finds
-files that still exist - so removals come from the manifest in the
-persisted build context. Use `--using=git` where removals matter; it
-reports them directly.
-
-Note that a change Acc cannot trace to individual pages - a partial, the
-config, anything outside the tracked dependencies - still triggers a full
-rebuild, whichever strategy found it.
-
-### Build cache
-
-Selective builds and `--using=mtime` build on the persisted build context,
-which Acc saves to the work directory after every build and reloads on the
-next one. It carries the previous build's dependency knowledge and
-timestamp. Pass `--no-cache` to neither load nor save it.
+- [Configuration](docs/configuration.md): `acc.yaml`, directories,
+  workflows, conditions and steps
+- [Modules](docs/modules.md): `@copy`, `@yaml`, `@markdown`, `@liquid` and
+  `@mustache`, and their options
+- [Content](docs/content.md): how content files become the build context
+- [Routing](docs/routing.md): how template paths become pages, including one
+  page per entry of a collection
+- [Templates](docs/templates.md): what a page can read, and the Liquid and
+  Mustache details that matter
+- [Builds](docs/builds.md): the dev server, selective builds, the cache and
+  the build manifest
 
 ## Development
 
