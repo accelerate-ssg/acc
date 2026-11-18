@@ -62,7 +62,7 @@ proc runModuleStep(step: Step, state: State) =
   of "markdown":
     markdown_renderer.run(step)
   else:
-    error "Unknown module: ", name
+    raise newException(ValueError, "Unknown module: " & step.module)
 
 proc runCommandStep(step: Step, state: State) =
   let command = step.command
