@@ -1,8 +1,7 @@
 ## Executable specification for the path router.
 ##
-## These tests describe the *target* grammar agreed in design, not what the
-## router does today. They are expected to fail until the router is rewritten;
-## a failing test here is a to-do item, and the suite is the definition of done.
+## These tests define the routing grammar and the rules below, so a change
+## to how templates route starts here.
 ##
 ##   nim c -r -p:src --threads:on --mm:orc --deepcopy:on test/path_router_spec.nim
 ##
