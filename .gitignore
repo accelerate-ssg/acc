@@ -5,6 +5,7 @@ node_modules
 # Build artifacts
 accelerate.json
 *.out
+nimble.develop
 
 # Compiled binaries in src/
 src/acc

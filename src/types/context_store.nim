@@ -20,7 +20,7 @@
 ## yields JNull. Reads return materialized copies, never live views.
 
 import std/[json, strutils, tables, streams, times, os, options]
-import re
+import regex
 
 import logger
 import arena_context_store
@@ -39,7 +39,7 @@ type
     ## appeared or disappeared.
     previous_outputs*: seq[tuple[source: string, output: string]]
 
-let path_regex = re"^(.+)\[(\d*)\]$"
+let path_regex = re2"^(.+)\[(\d*)\]$"
 
 proc newContextStore*(): ContextStore =
   new(result)
@@ -132,15 +132,16 @@ proc setAccPath*(ctx: ContextStore, keys: openArray[string], value: JsonNode) =
   ## the node enclosing the array, and an indexed last key appends after
   ## padding rather than assigning in place.
   var node = ctx.root
-  var matches: array[2, string]
+  var m: RegexMatch2
   let last_key = keys.len - 1
 
   for i in 0 .. last_key:
     if keys[i] == "": continue
 
-    if keys[i].match(path_regex, matches):
-      let key = matches[0]
-      let index = if matches[1] != "": matches[1].parse_int else: ctx.lenLike(node)
+    if keys[i].match(path_regex, m):
+      let key = keys[i][m.group(0)]
+      let idx = keys[i][m.group(1)]
+      let index = if idx != "": idx.parse_int else: ctx.lenLike(node)
 
       var next = ctx.arena.objGet(node, key)
       if next == InvalidNodeId:
